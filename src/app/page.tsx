@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
 import { BottomNav } from '@/components/layout/bottom-nav'
@@ -16,22 +16,14 @@ import { SettingsView } from '@/components/features/settings/settings-view'
 
 export default function Home() {
   const view = useAppStore((s) => s.view)
-  const [seeded, setSeeded] = useState(false)
+  const seededRef = useRef(false)
 
-  // Seed demo data once on first load
+  // Seed demo data once on first load - runs in background during splash
   useEffect(() => {
-    fetch('/api/seed', { method: 'POST' })
-      .then(() => setSeeded(true))
-      .catch(() => setSeeded(true))
+    if (seededRef.current) return
+    seededRef.current = true
+    fetch('/api/seed', { method: 'POST' }).catch(() => {})
   }, [])
-
-  if (!seeded) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-background">

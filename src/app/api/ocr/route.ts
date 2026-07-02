@@ -214,9 +214,20 @@ Aturan:
     return NextResponse.json(result)
   } catch (err) {
     console.error('OCR error:', err)
-    return NextResponse.json(
-      { error: 'OCR processing failed', detail: String(err) },
-      { status: 500 }
-    )
+    // Graceful fallback: return a low-confidence placeholder so the user can
+    // manually edit the fields in the OCR Preview screen. This keeps the app
+    // usable even when the Z.AI API key is not configured or the request fails.
+    const fallback: OcrResult = {
+      merchantName: 'Tidak Terbaca',
+      transactionDate: new Date().toISOString(),
+      total: 0,
+      invoiceNumber: null,
+      description: null,
+      items: [],
+      ocrText: 'OCR tidak tersedia. Silakan isi data manual.',
+      confidence: 30,
+      category: 'Lainnya',
+    }
+    return NextResponse.json(fallback)
   }
 }

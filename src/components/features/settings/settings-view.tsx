@@ -101,39 +101,43 @@ export function SettingsView() {
     <div className="min-h-screen pb-24">
       <AppHeader title="Pengaturan" subtitle="Kelola preferensi akun dan konfigurasi aplikasi Anda." />
 
-      <main className="mx-auto max-w-2xl px-4 py-4">
-        {/* Section menu */}
-        <Card className="mb-4 overflow-hidden">
-          {sections.map((s, i) => {
-            const Icon = s.icon
-            const isActive = active === s.id
-            return (
-              <button
-                key={s.id}
-                onClick={() => setActive(s.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
-                  isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
-                  i > 0 && 'border-t border-border'
-                )}
-              >
-                <Icon className={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
-                <span className={cn('flex-1 text-sm font-medium', isActive ? 'text-primary-foreground' : 'text-foreground')}>
-                  {s.label}
-                </span>
-                <ChevronRight className={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
-              </button>
-            )
-          })}
-        </Card>
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <div className="grid gap-4 lg:grid-cols-4">
+          {/* Section menu - sidebar on large, horizontal scroll list on small */}
+          <Card className="overflow-hidden lg:col-span-1 lg:sticky lg:top-20 lg:self-start">
+            <div className="no-scrollbar flex overflow-x-auto lg:flex-col lg:overflow-visible">
+              {sections.map((s, i) => {
+                const Icon = s.icon
+                const isActive = active === s.id
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setActive(s.id)}
+                    className={cn(
+                      'flex shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full',
+                      isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
+                      i > 0 && 'border-l border-border lg:border-l-0 lg:border-t'
+                    )}
+                  >
+                    <Icon className={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
+                    <span className={cn('whitespace-nowrap text-sm font-medium lg:whitespace-normal', isActive ? 'text-primary-foreground' : 'text-foreground')}>
+                      {s.label}
+                    </span>
+                    <ChevronRight className={cn('ml-auto hidden h-4 w-4 lg:block', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
+                  </button>
+                )
+              })}
+            </div>
+          </Card>
 
-        {/* Section content */}
-        <motion.div
-          key={active}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-        >
+          {/* Section content */}
+          <motion.div
+            key={active}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="lg:col-span-3"
+          >
           {active === 'general' && (
             <Card className="space-y-4 p-4">
               <h3 className="text-sm font-bold text-foreground">Pengaturan Umum</h3>
@@ -440,6 +444,7 @@ export function SettingsView() {
             </Card>
           )}
         </motion.div>
+        </div>
 
         {/* App info */}
         <div className="mt-6 flex flex-col items-center gap-1 text-center">

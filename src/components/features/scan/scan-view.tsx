@@ -284,8 +284,8 @@ export function ScanView() {
       />
 
       {/* Camera viewport */}
-      <div className="relative mx-auto max-w-2xl px-4 pt-4">
-        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-black">
+      <div className="relative mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+        <div className="relative mx-auto aspect-[3/4] w-full max-w-md overflow-hidden rounded-3xl bg-black sm:max-w-lg">
           {/* Hidden canvas for capture */}
           <canvas ref={canvasRef} className="hidden" />
 

@@ -127,7 +127,7 @@ export function HistoryView() {
     <div className="min-h-screen pb-24">
       <AppHeader title="History" subtitle="Riwayat nota digital tersimpan" />
 
-      <main className="mx-auto max-w-2xl px-4 py-4 space-y-4">
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 space-y-4 sm:px-6 sm:py-6 lg:px-8">
         {/* Search bar */}
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
@@ -148,7 +148,7 @@ export function HistoryView() {
         </div>
 
         {/* Filter controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Select value={sort} onValueChange={setSort}>
             <SelectTrigger className="h-9 flex-1 rounded-xl bg-card text-xs">
               <span className="text-muted-foreground">Urutkan:</span>
@@ -187,9 +187,9 @@ export function HistoryView() {
         </p>
 
         {/* Receipt cards */}
-        <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {loading
-            ? Array.from({ length: 4 }).map((_, i) => (
+            ? Array.from({ length: 8 }).map((_, i) => (
                 <Card key={i} className="p-3">
                   <div className="flex gap-3">
                     <Skeleton className="h-16 w-16 rounded-lg" />

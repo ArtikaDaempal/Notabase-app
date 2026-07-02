@@ -122,55 +122,66 @@ export function OcrPreviewView() {
         showLogo={false}
       />
 
-      <main className="mx-auto max-w-2xl px-4 py-4 space-y-4">
-        {/* Image preview */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Card className="overflow-hidden">
-            <div className="relative aspect-[4/3] w-full bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={pendingOcr.imageUrl}
-                alt="Receipt preview"
-                className="h-full w-full object-cover"
-              />
-            </div>
-          </Card>
-        </motion.div>
-
-        {/* OCR results header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-foreground">Hasil OCR</h2>
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold',
-              confidenceTone
-            )}
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 space-y-4 sm:px-6 sm:py-6 lg:px-8">
+        <div className="grid gap-4 lg:grid-cols-5">
+          {/* Image preview - left column on large */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="lg:col-span-2 lg:sticky lg:top-20 lg:self-start"
           >
-            {confidence >= 85 ? (
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            ) : (
-              <AlertTriangle className="h-3.5 w-3.5" />
+            <Card className="overflow-hidden">
+              <div className="relative aspect-[4/3] w-full bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={pendingOcr.imageUrl}
+                  alt="Receipt preview"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            </Card>
+
+            {/* OCR results header - below image on large */}
+            <div className="mt-4 flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Hasil OCR</h2>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold',
+                  confidenceTone
+                )}
+              >
+                {confidence >= 85 ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                )}
+                Tingkat Akurasi: {Math.round(confidence)}%
+              </span>
+            </div>
+
+            {confidence < 65 && (
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Akurasi OCR rendah. Periksa kembali semua field sebelum
+                  menyimpan, atau lakukan scan ulang dengan pencahayaan yang lebih
+                  baik.
+                </span>
+              </div>
             )}
-            Tingkat Akurasi: {Math.round(confidence)}%
-          </span>
-        </div>
 
-        {confidence < 65 && (
-          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              Akurasi OCR rendah. Periksa kembali semua field sebelum
-              menyimpan, atau lakukan scan ulang dengan pencahayaan yang lebih
-              baik.
-            </span>
-          </div>
-        )}
+            {/* Info note */}
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-primary/5 p-3 text-xs text-muted-foreground">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>
+                Pastikan semua data telah sesuai dengan gambar asli sebelum
+                menyimpannya. Sistem akan otomatis menyimpan data ke Notabase.
+              </span>
+            </div>
+          </motion.div>
 
-        {/* Form fields */}
-        <Card className="space-y-4 p-4">
+          {/* Form fields - right column on large */}
+          <Card className="space-y-4 p-4 sm:p-5 lg:col-span-3">
           {/* Tanggal */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">
@@ -289,18 +300,10 @@ export function OcrPreviewView() {
             </div>
           </div>
         </Card>
-
-        {/* Info note */}
-        <div className="flex items-start gap-2 rounded-xl bg-primary/5 p-3 text-xs text-muted-foreground">
-          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          <span>
-            Pastikan semua data di atas telah sesuai dengan gambar asli sebelum
-            menyimpannya. Sistem akan otomatis menyimpan data ke Notabase.
-          </span>
         </div>
 
         {/* Save button */}
-        <div className="sticky bottom-20 z-20">
+        <div className="sticky bottom-20 z-20 mx-auto w-full max-w-md">
           <Button
             size="lg"
             className="w-full shadow-lg shadow-primary/30"

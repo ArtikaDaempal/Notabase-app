@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ShoppingBag,
+  Tag,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { AppHeader } from '@/components/layout/app-header'
@@ -97,9 +98,9 @@ export function DashboardView() {
         subtitle="Ringkasan aktivitas nota digital Anda"
       />
 
-      <main className="mx-auto max-w-2xl px-4 py-4 space-y-5">
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 space-y-5 sm:px-6 sm:py-6 lg:px-8">
         {/* Quick actions */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3 sm:gap-4">
           {quickActions.map((qa) => {
             const Icon = qa.icon
             return (
@@ -125,7 +126,7 @@ export function DashboardView() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 lg:gap-5">
           {loading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i} className="p-4">
@@ -169,7 +170,7 @@ export function DashboardView() {
         </div>
 
         {/* Chart card */}
-        <Card className="p-4">
+        <Card className="p-4 sm:p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -223,46 +224,70 @@ export function DashboardView() {
           </div>
         </Card>
 
-        {/* Top categories */}
+        {/* Responsive two-column section: chart alongside categories on large screens */}
         {stats && stats.topCategories.length > 0 && (
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-foreground">
-                Kategori Terbanyak
-              </h3>
-              <span className="text-[11px] text-muted-foreground">
-                Top {stats.topCategories.length}
-              </span>
-            </div>
-            <div className="mt-3 space-y-2.5">
-              {stats.topCategories.map((cat, i) => {
-                const maxTotal = stats.topCategories[0].total || 1
-                return (
-                  <div key={cat.name} className="flex items-center gap-3">
-                    <span className="w-5 text-xs font-bold text-muted-foreground">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-foreground">
-                          {cat.name}
-                        </span>
-                        <span className="text-xs font-semibold text-primary">
-                          {formatRupiah(cat.total)}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary"
-                          style={{ width: `${(cat.total / maxTotal) * 100}%` }}
-                        />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="p-4 sm:p-5 lg:col-span-1">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Tag className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Kategori Terbanyak</h3>
+                  <p className="text-[11px] text-muted-foreground">Top {stats.topCategories.length}</p>
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                {stats.topCategories.map((cat, i) => {
+                  const maxTotal = stats.topCategories[0].total || 1
+                  return (
+                    <div key={cat.name} className="flex items-center gap-3">
+                      <span className="w-5 text-xs font-bold text-muted-foreground">{i + 1}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-foreground">{cat.name}</span>
+                          <span className="text-xs font-semibold text-primary">{formatRupiah(cat.total)}</span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${(cat.total / maxTotal) * 100}%` }} />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          </Card>
+                  )
+                })}
+              </div>
+            </Card>
+            <Card className="p-4 sm:p-5 lg:col-span-1">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                  <ShoppingBag className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Merchant Terbanyak</h3>
+                  <p className="text-[11px] text-muted-foreground">Berdasarkan jumlah nota</p>
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                {stats.topMerchants.map((m, i) => {
+                  const maxCount = stats.topMerchants[0].count || 1
+                  return (
+                    <div key={m.name} className="flex items-center gap-3">
+                      <span className="w-5 text-xs font-bold text-muted-foreground">{i + 1}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-foreground">{m.name}</span>
+                          <span className="text-xs font-semibold text-foreground">{m.count} nota</span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(m.count / maxCount) * 100}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          </div>
         )}
 
         {/* Recent activity */}
@@ -278,7 +303,7 @@ export function DashboardView() {
               Lihat semua <ArrowUpRight className="ml-1 h-3 w-3" />
             </Button>
           </div>
-          <div className="space-y-2.5">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {loading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <Card key={i} className="p-3">

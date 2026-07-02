@@ -204,10 +204,10 @@ export function ReportView() {
     <div className="min-h-screen pb-24">
       <AppHeader title="Laporan" subtitle="Analisis pengeluaran nota digital" />
 
-      <main className="mx-auto max-w-2xl px-4 py-4 space-y-4">
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 space-y-4 sm:px-6 sm:py-6 lg:px-8">
         {/* Period tabs */}
         <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)}>
-          <TabsList className="grid w-full grid-cols-5 h-auto">
+          <TabsList className="grid w-full grid-cols-5 h-auto max-w-xl">
             <TabsTrigger value="daily" className="text-[11px] py-1.5">Harian</TabsTrigger>
             <TabsTrigger value="weekly" className="text-[11px] py-1.5">Mingguan</TabsTrigger>
             <TabsTrigger value="monthly" className="text-[11px] py-1.5">Bulanan</TabsTrigger>
@@ -255,7 +255,7 @@ export function ReportView() {
         )}
 
         {/* Summary cards */}
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {loading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i} className="p-4">

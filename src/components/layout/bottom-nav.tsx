@@ -20,8 +20,8 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto max-w-2xl px-2">
-        <div className="grid grid-cols-4">
+      <div className="mx-auto w-full max-w-7xl px-2 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-md grid-cols-4">
           {tabs.map((tab) => {
             const active = activeTab === tab.id && view === tab.id
             const Icon = tab.icon

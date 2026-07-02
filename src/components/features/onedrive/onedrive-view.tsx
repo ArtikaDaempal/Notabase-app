@@ -130,7 +130,10 @@ export function OnedriveView() {
         showLogo={false}
       />
 
-      <main className="mx-auto max-w-2xl px-4 py-4 space-y-4">
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 space-y-4 sm:px-6 sm:py-6 lg:px-8">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Left: account status + cloud usage + upload (col-span-2 on large) */}
+          <div className="space-y-4 lg:col-span-2">
         {/* Account status card */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card className={cn(
@@ -253,7 +256,10 @@ export function OnedriveView() {
             Unggah Laporan Terbaru
           </Button>
         )}
+          </div>
 
+          {/* Right column: upload history */}
+          <div className="lg:col-span-1">
         {/* Upload history */}
         <div>
           <div className="mb-3 flex items-center justify-between">
@@ -262,7 +268,7 @@ export function OnedriveView() {
               <RefreshCw className="mr-1 h-3 w-3" /> Refresh
             </Button>
           </div>
-          <div className="space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
             {loading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <Card key={i} className="p-3">
@@ -336,6 +342,8 @@ export function OnedriveView() {
                   </p>
                 </Card>
               )}
+          </div>
+        </div>
           </div>
         </div>
       </main>

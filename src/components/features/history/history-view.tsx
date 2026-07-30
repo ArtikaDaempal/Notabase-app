@@ -163,7 +163,7 @@ export function HistoryView() {
         {/* Scan CTA button */}
         <button
           onClick={() => navigate('scan')}
-          className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-[0.99] transition-all"
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
         >
           <ScanLine className="h-4 w-4" />
           Scan Nota Baru
@@ -343,13 +343,13 @@ export function HistoryView() {
             <div className="mt-6 flex w-full max-w-xs flex-col gap-2.5">
               <button
                 onClick={() => navigate('scan')}
-                className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-[0.99] transition-all"
+                className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
               >
                 <ScanLine className="h-4 w-4" />
                 Scan Nota Sekarang
               </button>
               <button
-                className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white py-3.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 active:scale-[0.99] transition-all"
+                className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white py-3.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
               >
                 <ImagePlus className="h-4 w-4" />
                 Import dari Galeri

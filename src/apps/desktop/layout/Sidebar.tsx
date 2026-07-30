@@ -59,7 +59,7 @@ export const SIDEBAR_NAV_ITEMS: {
     id: 'settings',
     label: 'Pengaturan',
     icon: Settings,
-    description: 'Preferensi & Akun',
+    description: 'Preferensi Aplikasi',
   },
 ]
 

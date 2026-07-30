@@ -40,7 +40,6 @@ import {
   useSyncQueue,
   useTriggerSync,
 } from '@/shared/hooks/useReceipts'
-import { KATEGORI_OPTIONS } from '@/shared/ui/ReceiptForm'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/constants'
 import type { NavTab } from '@/types'
 
@@ -192,7 +191,7 @@ export function ArsipDesktopPage({
                 Kelola Nota Transaksi
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Daftar nota terverifikasi untuk workspace <span className="font-semibold text-blue-600">{workspaceName}</span>
+                Daftar nota terverifikasi dalam sistem NotaBase
               </p>
             </div>
 
@@ -247,28 +246,7 @@ export function ArsipDesktopPage({
                 />
               </div>
 
-              {/* Kategori Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-                  <Tag className="h-3 w-3 text-blue-500" /> Kategori
-                </label>
-                <Select
-                  value={kategori || 'ALL'}
-                  onValueChange={(val) => setKategori(val === 'ALL' ? null : val)}
-                >
-                  <SelectTrigger className="h-10 rounded-xl border-slate-200 dark:border-slate-700 text-xs bg-slate-50/50 dark:bg-slate-800/50">
-                    <SelectValue placeholder="Semua Kategori" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">Semua Kategori</SelectItem>
-                    {KATEGORI_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+
 
               {/* Status OCR Filter */}
               <div className="space-y-1">

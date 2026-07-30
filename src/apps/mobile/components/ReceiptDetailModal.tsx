@@ -235,10 +235,7 @@ export function ReceiptDetailModal({
                       <Calendar className="h-3.5 w-3.5 text-blue-500" />
                       <span>{formatDateID(dateStr)}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Tag className="h-3.5 w-3.5 text-blue-500" />
-                      <span>{receipt.kategori || 'Lainnya'}</span>
-                    </div>
+
                     <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                       <CreditCard className="h-3.5 w-3.5 text-blue-500" />
                       <span>{receipt.metodePembayaran || 'Tunai'}</span>

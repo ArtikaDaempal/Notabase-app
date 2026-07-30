@@ -39,16 +39,6 @@ import { formatRupiah, cn } from '@/lib/utils'
 import { calculateReceiptTotals } from '../services/receiptService'
 import type { Receipt, ReceiptItem } from '../types/receipt'
 
-export const KATEGORI_OPTIONS = [
-  { value: 'ATK', label: 'ATK & Peralatan Kantor' },
-  { value: 'Konsumsi', label: 'Konsumsi & Makanan' },
-  { value: 'Operasional', label: 'Operasional' },
-  { value: 'Transportasi', label: 'Transportasi & Bensin' },
-  { value: 'Utilitas', label: 'Utilitas & Listrik/Air' },
-  { value: 'Referensi', label: 'Buku & Referensi' },
-  { value: 'Lainnya', label: 'Lainnya' },
-]
-
 export const METODE_PEMBAYARAN_OPTIONS = [
   { value: 'Tunai', label: 'Tunai / Cash' },
   { value: 'Debit', label: 'Kartu Debit' },
@@ -79,7 +69,6 @@ export function ReceiptForm({
   const [receiptNumber, setReceiptNumber] = useState(
     initialData?.receiptNumber || initialData?.invoiceNumber || '',
   )
-  const [kategori, setKategori] = useState(initialData?.kategori || 'ATK')
   const [metodePembayaran, setMetodePembayaran] = useState(initialData?.metodePembayaran || 'Tunai')
   const [receiptTemplate, setReceiptTemplate] = useState(initialData?.receiptTemplate || '80mm')
   const [keterangan, setKeterangan] = useState(
@@ -172,7 +161,6 @@ export function ReceiptForm({
       namaToko: namaToko.trim(),
       tanggal,
       receiptNumber: receiptNumber.trim() || undefined,
-      kategori,
       metodePembayaran,
       receiptTemplate,
       keterangan: keterangan.trim() || undefined,
@@ -257,24 +245,7 @@ export function ReceiptForm({
             />
           </div>
 
-          {/* Kategori Nota */}
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400">
-              <Tag className="h-3.5 w-3.5 text-blue-500" /> Kategori Transaksi
-            </Label>
-            <Select value={kategori} onValueChange={setKategori}>
-              <SelectTrigger className="rounded-xl h-11 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-sm">
-                <SelectValue placeholder="Pilih kategori" />
-              </SelectTrigger>
-              <SelectContent>
-                {KATEGORI_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+
 
           {/* Metode Pembayaran */}
           <div className="space-y-1.5">

@@ -620,7 +620,7 @@ export function ReportView() {
           <button
             onClick={handleExport}
             disabled={exporting || loading}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-[#107C41] hover:bg-[#0E6C38] py-3.5 px-4 text-xs sm:text-sm font-bold text-white shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-[#107C41] hover:bg-[#0E6C38] py-3.5 px-4 text-xs sm:text-sm font-bold text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
           >
             {exporting ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 sm:h-5 sm:w-5" />}
             <span className="truncate">Export ke Excel</span>
@@ -629,7 +629,7 @@ export function ReportView() {
           <button
             onClick={handleUpload}
             disabled={syncing || loading}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-[#0078D4] hover:bg-[#106EBE] py-3.5 px-4 text-xs sm:text-sm font-bold text-white shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-[#0078D4] hover:bg-[#106EBE] py-3.5 px-4 text-xs sm:text-sm font-bold text-white shadow-md shadow-blue-600/20 active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
           >
             {syncing ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <Cloud className="h-4 w-4 sm:h-5 sm:w-5" />}
             <span className="truncate">Upload ke OneDrive</span>
@@ -637,7 +637,7 @@ export function ReportView() {
 
           <button
             onClick={handleViewOneDrive}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-white hover:bg-slate-50 border-2 border-[#0078D4] py-3.5 px-4 text-xs sm:text-sm font-bold text-[#0078D4] shadow-md shadow-blue-200/40 active:scale-[0.99] transition-all cursor-pointer"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-white hover:bg-slate-50 border-2 border-[#0078D4] py-3.5 px-4 text-xs sm:text-sm font-bold text-[#0078D4] shadow-md shadow-blue-200/40 active:scale-95 transition-all cursor-pointer"
           >
             <FolderOpen className="h-4 w-4 sm:h-5 sm:w-5" />
             <span className="truncate">Lihat File di OneDrive</span>

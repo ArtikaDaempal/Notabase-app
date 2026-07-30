@@ -37,7 +37,6 @@ import {
   useUpdateReceipt,
   useDeleteReceipt,
 } from '@/shared/hooks/useReceipts'
-import { KATEGORI_OPTIONS } from '@/shared/ui/ReceiptForm'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
 import { cn } from '@/lib/utils'
 import type { NavTab } from '@/types'
@@ -117,7 +116,7 @@ export function ArsipMobilePage({
                 Notabase
               </span>
               <span className="block text-[10px] text-slate-400 font-medium leading-none mt-0.5 truncate max-w-[140px]">
-                {workspaceName}
+                Arsip Nota Digital
               </span>
             </div>
           </div>
@@ -172,25 +171,7 @@ export function ArsipMobilePage({
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold text-slate-500">Kategori</label>
-                  <Select
-                    value={kategori || 'ALL'}
-                    onValueChange={(val) => setKategori(val === 'ALL' ? null : val)}
-                  >
-                    <SelectTrigger className="h-9 rounded-xl text-xs border-slate-200 dark:border-slate-800">
-                      <SelectValue placeholder="Semua" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">Semua Kategori</SelectItem>
-                      {KATEGORI_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold text-slate-500">Status OCR</label>

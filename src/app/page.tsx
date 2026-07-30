@@ -21,9 +21,6 @@ import { UploadProgressView } from '@/components/features/onedrive/upload-progre
 import { SettingsView } from '@/components/features/settings/settings-view'
 import { SearchView } from '@/components/features/search/search-view'
 import { GalleryView } from '@/components/features/gallery/gallery-view'
-import { WorkspaceSetupView } from '@/components/features/workspace/workspace-setup-view'
-import { InviteGate } from '@/packages/ui-shared/InviteGate'
-import { isDeviceUnlocked } from '@/shared/services/deviceGate'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
 import { NetworkStatusBar } from '@/components/ui/network-status-bar'
 import type { NavTab } from '@/types'
@@ -36,14 +33,6 @@ export default function Home() {
   const openReceipt = useAppStore((s) => s.openReceipt)
   const setLanguage = useAppStore((s) => s.setLanguage)
 
-  const [isUnlocked, setIsUnlocked] = useState(false)
-  const [checkingUnlock, setCheckingUnlock] = useState(true)
-
-  useEffect(() => {
-    setIsUnlocked(isDeviceUnlocked())
-    setCheckingUnlock(false)
-  }, [])
-
   const isSetupComplete = useWorkspaceStore((s) => s.isSetupComplete)
   const workspaceName = SINGLE_TENANT_WORKSPACE.name
   const workspaceCode = SINGLE_TENANT_WORKSPACE.code
@@ -52,37 +41,21 @@ export default function Home() {
   const isDesktop = useIsDesktop(768)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
-  // Skip setup & start from splash if workspace is ready
+  // Redirect workspace-setup view straight to dashboard
   useEffect(() => {
-    if (isSetupComplete && view === 'workspace-setup') {
-      navigate('splash')
+    if (view === 'workspace-setup') {
+      navigate('dashboard')
     }
-  }, [isSetupComplete, view, navigate])
+  }, [view, navigate])
 
   useEffect(() => {
-    if (!isSetupComplete) return
     fetch('/api/settings')
       .then((r) => r.json())
       .then((d) => {
         if (d.language) setLanguage(d.language)
       })
       .catch((err) => console.error('Failed to load initial settings:', err))
-  }, [isSetupComplete, setLanguage])
-
-  // Device Gate activation overlay if not unlocked yet
-  if (!checkingUnlock && !isUnlocked) {
-    return <InviteGate onSuccess={() => setIsUnlocked(true)} />
-  }
-
-  // Full-screen standalone views (Splash & Workspace Setup)
-  if (view === 'workspace-setup') {
-    return (
-      <div className="min-h-screen bg-background">
-        <NetworkStatusBar />
-        <WorkspaceSetupView />
-      </div>
-    )
-  }
+  }, [setLanguage])
 
   if (view === 'splash') {
     return (

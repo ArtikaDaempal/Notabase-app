@@ -198,7 +198,7 @@ export function SearchView() {
           {/* Search button */}
           <button
             onClick={() => doSearch(1)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-[0.99] transition-all"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
           >
             <Search className="h-4 w-4" />
             Cari Nota

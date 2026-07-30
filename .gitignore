@@ -21,7 +21,11 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (contains secrets - copy .env.example)
-.env*
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 !.env.example
 
 # vercel
@@ -55,3 +59,14 @@ mini-services/
 Caddyfile
 start-server.sh
 worklog.md
+
+# ==========================================
+# DESKTOP BUILD & LARGE FILES (PENTING!)
+# ==========================================
+dist/
+dist-desktop/
+*.zip
+*.exe
+*.dmg
+*.AppImage
+*.deb

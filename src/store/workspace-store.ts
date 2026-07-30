@@ -72,15 +72,15 @@ export function generateInstallId(): string {
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set) => ({
-      // Initial state — null = belum setup
-      workspaceId: null,
-      workspaceCode: null,
-      workspaceName: null,
-      workspaceLogoUrl: null,
-      installId: null,
-      deviceId: null,
-      deviceName: null,
-      isSetupComplete: false,
+      // Initial state — Default to Single-Tenant Workspace for seamless app loading
+      workspaceId: '00000000-0000-4000-a000-000000000000',
+      workspaceCode: 'BLSDM-MND-9842X',
+      workspaceName: 'BLSDM KOMDIGI MANADO',
+      workspaceLogoUrl: '/kominfo-logo.png',
+      installId: 'bpsdmp-default-install-id',
+      deviceId: 'bpsdmp-default-device-id',
+      deviceName: 'Perangkat Utama',
+      isSetupComplete: true,
 
       /**
        * Simpan konfigurasi workspace setelah setup berhasil.

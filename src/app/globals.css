@@ -1,5 +1,72 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Inline animation keyframes (replaces tw-animate-css import to avoid PostCSS parse error) */
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes slide-in-from-top {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+@keyframes slide-in-from-bottom {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes slide-in-from-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes zoom-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes zoom-out {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+@keyframes pulse {
+  50% { opacity: 0.5; }
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(-25%); animation-timing-function: cubic-bezier(0.8,0,1,1); }
+  50% { transform: none; animation-timing-function: cubic-bezier(0,0,0.2,1); }
+}
+
+.animate-accordion-down { animation: accordion-down 0.2s ease-out; }
+.animate-accordion-up { animation: accordion-up 0.2s ease-out; }
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-fade-out { animation: fade-out 0.2s ease-out; }
+.animate-zoom-in { animation: zoom-in 0.2s ease-out; }
+.animate-zoom-out { animation: zoom-out 0.2s ease-out; }
+.animate-slide-in-from-top { animation: slide-in-from-top 0.2s ease-out; }
+.animate-slide-in-from-bottom { animation: slide-in-from-bottom 0.2s ease-out; }
+.animate-slide-in-from-left { animation: slide-in-from-left 0.2s ease-out; }
+.animate-slide-in-from-right { animation: slide-in-from-right 0.2s ease-out; }
 
 @custom-variant dark (&:is(.dark *));
 
@@ -10,45 +77,7 @@
   }
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-geist-mono);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-}
+
 
 :root {
   --radius: 1rem;
@@ -169,8 +198,8 @@ html.dark {
   --accent: oklch(0.3 0.05 262);
   --accent-foreground: oklch(0.95 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 12%);
+  --border: oklch(1 0 0 / 0.12);
+  --input: oklch(1 0 0 / 0.12);
   --ring: oklch(0.62 0.2 262);
   --chart-1: oklch(0.62 0.2 262);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -314,9 +343,6 @@ html.dark main {
 
 /* Base Card & Header Backgrounds */
 html.dark .bg-white,
-html.dark .bg-white\/80,
-html.dark .bg-white\/90,
-html.dark .bg-white\/95,
 html.dark header,
 html.dark .bg-card,
 html.dark [role="dialog"] {
@@ -408,31 +434,24 @@ html.dark .text-amber-500 {
 }
 
 html.dark .text-red-500,
-html.dark .text-red-600,
-html.dark .text-\[\#DC2626\] {
+html.dark .text-red-600 {
   color: #f87171 !important;
 }
 
 /* Color Backgrounds & Badges in Dark Mode */
 html.dark .bg-slate-50,
-html.dark .bg-slate-100,
-html.dark .bg-slate-50\/70 {
+html.dark .bg-slate-100 {
   background-color: var(--muted) !important;
   color: var(--foreground) !important;
 }
 
-html.dark .bg-blue-50,
-html.dark .bg-blue-50\/80,
-html.dark .bg-blue-50\/70,
-html.dark .bg-\[\#EEF4FF\] {
+html.dark .bg-blue-50 {
   background-color: rgba(30, 58, 138, 0.35) !important;
   border-color: rgba(59, 130, 246, 0.3) !important;
   color: #93c5fd !important;
 }
 
-html.dark .bg-emerald-50,
-html.dark .bg-emerald-50\/80,
-html.dark .bg-\[\#EDF9F1\] {
+html.dark .bg-emerald-50 {
   background-color: rgba(6, 78, 59, 0.35) !important;
   border-color: rgba(16, 185, 129, 0.3) !important;
   color: #6ee7b7 !important;
@@ -451,17 +470,10 @@ html.dark .bg-amber-50 {
   color: #fde047 !important;
 }
 
-html.dark .bg-red-50,
-html.dark .bg-\[\#FEF2F2\] {
+html.dark .bg-red-50 {
   background-color: rgba(127, 29, 29, 0.35) !important;
   border-color: rgba(239, 68, 68, 0.3) !important;
   color: #fca5a5 !important;
-}
-
-/* Hover States in Dark Mode */
-html.dark .hover\:bg-slate-50:hover,
-html.dark .hover\:bg-slate-100:hover {
-  background-color: oklch(0.26 0.02 256) !important;
 }
 
 /* Form Controls & Inputs */
@@ -518,7 +530,6 @@ html.dark [role="switch"]:not([data-state="checked"]) {
 /* Borders & Dividers */
 html.dark .border-slate-100,
 html.dark .border-slate-200,
-html.dark .border-slate-100\/80,
 html.dark .divide-slate-100 > *,
 html.dark .divide-y > * {
   border-color: var(--border) !important;

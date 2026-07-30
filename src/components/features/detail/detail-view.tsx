@@ -695,16 +695,13 @@ export function DetailView() {
                     </span>
                   </div>
 
-                  {/* Kategori & Metode Pembayaran */}
+                  {/* Metode Pembayaran */}
                   <div className="flex items-center justify-between py-3">
                     <span className="flex items-center gap-2 text-xs text-slate-500">
                       <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
-                      Kategori & Metode
+                      Metode Pembayaran
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
-                        {receipt.kategori || 'Utilitas'}
-                      </span>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
                         {receipt.metodePembayaran || 'Digital'}
                       </span>

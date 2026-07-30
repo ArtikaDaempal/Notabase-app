@@ -110,16 +110,10 @@ export function ReceiptCard({
             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
               {merchantName}
             </h4>
-            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
               <span className="flex items-center gap-1">
                 <Calendar className="h-3 w-3 text-slate-400" />
                 {formatDateShort(dateStr)}
               </span>
-              <span>·</span>
-              <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-semibold', tagColorStyle)}>
-                {kategori}
-              </span>
-            </div>
           </div>
         </div>
 
@@ -229,10 +223,7 @@ export function ReceiptCard({
           </h4>
         </div>
 
-        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
-          <span className={cn('px-2 py-0.5 rounded-full text-[9px] font-bold', tagColorStyle)}>
-            {kategori}
-          </span>
+        <div className="flex items-center justify-end pt-1 border-t border-slate-100 dark:border-slate-800">
           <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400">
             {formatRupiah(totalAmount)}
           </span>

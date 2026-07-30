@@ -444,7 +444,7 @@ export function SettingsView() {
 
             <Button
               onClick={() => navigate('onedrive')}
-              className="w-full rounded-2xl h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-[0.99] transition-all cursor-pointer"
+              className="w-full rounded-2xl h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer"
             >
               <Cloud className="h-4.5 w-4.5" />
               <span>Buka Menu Backup & Sinkronisasi OneDrive</span>
@@ -472,7 +472,7 @@ export function SettingsView() {
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button className="w-full rounded-2xl h-11 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-red-600/20 active:scale-[0.99] transition-all cursor-pointer">
+              <Button className="w-full rounded-2xl h-11 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-red-600/20 active:scale-95 transition-all cursor-pointer">
                 <Trash2 className="h-4 w-4" />
                 <span>Reset Pengaturan</span>
               </Button>

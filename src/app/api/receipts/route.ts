@@ -50,7 +50,6 @@ export async function GET(req: NextRequest) {
 
     if (statusOcr) query = query.eq('status_ocr', statusOcr as StatusOcr)
     if (receiptType) query = query.eq('receipt_type', receiptType as ReceiptType)
-    if (kategori) query = query.eq('kategori', kategori)
     if (hasImage) query = query.not('image_url', 'is', null)
     if (startDate) query = query.gte('tanggal', startDate.slice(0, 10))
     if (endDate) query = query.lte('tanggal', endDate.slice(0, 10))
@@ -134,10 +133,7 @@ export async function GET(req: NextRequest) {
       return false
     }
 
-    // Kategori filter
-    if (kategori && r.kategori !== kategori) {
-      return false
-    }
+
 
     // Amount range filter
     const amount = Number(r.nominal ?? r.total ?? 0)
@@ -173,7 +169,7 @@ export async function GET(req: NextRequest) {
   })
 }
 
-export function normalizeStatusOcr(status?: string): StatusOcr {
+function normalizeStatusOcr(status?: string): StatusOcr {
   if (!status) return 'berhasil'
   const s = status.toLowerCase()
   if (s === 'berhasil' || s === 'verified' || s === 'completed' || s === 'success') return 'berhasil'

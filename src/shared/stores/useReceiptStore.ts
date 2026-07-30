@@ -71,7 +71,7 @@ export const useReceiptStore = create<ReceiptState>((set) => ({
   isFilterOpen: false,
 
   setSearchQuery: (searchQuery) => set({ searchQuery, page: 1 }),
-  setKategori: (kategori) => set({ kategori, page: 1 }),
+  setKategori: () => {},
   setReceiptType: (receiptType) => set({ receiptType, page: 1 }),
   setStatusOcr: (statusOcr) => set({ statusOcr, page: 1 }),
   setDateRange: (startDate, endDate) => set({ startDate, endDate, page: 1 }),

@@ -8,7 +8,7 @@
  */
 
 import { useEffect } from 'react'
-import { Home, Folder, Plus, BarChart2, User } from 'lucide-react'
+import { Home, Folder, Plus, BarChart2, Settings } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import type { NavTab } from '@/types'
 import { cn } from '@/lib/utils'
@@ -20,7 +20,7 @@ const tabs: { id: NavTab; label: string; icon: typeof Home; isCenter?: boolean }
   { id: 'history',   label: 'Arsip',     icon: Folder },
   { id: 'scan',      label: '',          icon: Plus, isCenter: true },
   { id: 'report',    label: 'Laporan',   icon: BarChart2 },
-  { id: 'settings',  label: 'Profil',    icon: User },
+  { id: 'settings',  label: 'Pengaturan', icon: Settings },
 ]
 
 const MAIN_TABS: NavTab[] = ['dashboard', 'scan', 'history', 'report', 'settings']
@@ -37,7 +37,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-slate-100 bg-white/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)] shadow-lg"
+      className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-slate-100 bg-white/95 backdrop-blur-lg pb-2 shadow-lg"
       aria-label="Navigasi utama"
     >
       <div className="mx-auto w-full max-w-7xl px-2 sm:px-6">

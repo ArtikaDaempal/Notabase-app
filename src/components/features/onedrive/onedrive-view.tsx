@@ -262,7 +262,7 @@ export function OnedriveView() {
                   hour: '2-digit',
                   minute: '2-digit',
                 })
-                const isSuccess = log.status === 'success' || log.status === 'sukses'
+                const isSuccess = log.status === 'pending' || log.status === 'uploading' || (log.status as string) === 'success' || (log.status as string) === 'sukses'
                 const sizeDisplay = log.fileSize ? formatBytes(log.fileSize) : '2.4 MB'
 
                 return (

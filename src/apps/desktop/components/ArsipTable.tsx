@@ -101,9 +101,6 @@ export function ArsipTable({
                 <TableHead className="text-xs font-bold text-slate-600 dark:text-slate-300 min-w-[160px]">
                   NAMA TOKO / MERCHANT
                 </TableHead>
-                <TableHead className="text-xs font-bold text-slate-600 dark:text-slate-300 w-32">
-                  KATEGORI
-                </TableHead>
                 <TableHead className="text-right text-xs font-bold text-slate-600 dark:text-slate-300 w-36">
                   NOMINAL (RP)
                 </TableHead>
@@ -171,13 +168,6 @@ export function ArsipTable({
                       {/* Nama Toko */}
                       <TableCell className="font-bold text-slate-900 dark:text-slate-100 max-w-[200px] truncate" title={merchantName}>
                         {merchantName}
-                      </TableCell>
-
-                      {/* Kategori */}
-                      <TableCell>
-                        <span className={cn('px-2.5 py-1 rounded-full text-[10px] font-bold inline-block', tagStyle)}>
-                          {kategori}
-                        </span>
                       </TableCell>
 
                       {/* Nominal */}

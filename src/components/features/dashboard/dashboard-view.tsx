@@ -246,31 +246,7 @@ export function DashboardView() {
       </header>
 
       <div className="space-y-5">
-        {/* Welcome Section Banner (Matching Mockup Illustration & Text) */}
-        <Card className="relative overflow-hidden border border-slate-100/80 dark:border-slate-800 bg-gradient-to-r from-[#EEF4FF] via-[#F2F6FE] to-[#EBF3FE] dark:from-slate-900 dark:via-blue-950/40 dark:to-slate-900 p-6 sm:p-7 shadow-2xs rounded-3xl">
-          <div className="flex flex-row items-center justify-between gap-4">
-            <div className="space-y-1 z-10 max-w-md">
-              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-                Selamat datang kembali, {userName}! 👏
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-                Kelola nota Anda dengan mudah dan efisien.
-              </p>
-            </div>
 
-            {/* Folder 3D Illustration Graphic (Matching Mockup) */}
-            <div className="shrink-0 relative h-20 w-24 sm:h-24 sm:w-32 flex items-center justify-center">
-              <svg className="w-full h-full text-blue-500 drop-shadow-md" viewBox="0 0 160 120" fill="none">
-                <rect x="20" y="25" width="120" height="85" rx="14" fill="#2563EB" />
-                <rect x="35" y="10" width="70" height="50" rx="8" fill="#EFF6FF" transform="rotate(-6 35 10)" />
-                <rect x="45" y="18" width="70" height="50" rx="8" fill="#FFFFFF" transform="rotate(3 45 18)" />
-                <path d="M20 45 C20 40, 30 35, 45 35 L70 35 C80 35, 85 42, 95 42 L130 42 C137 42, 140 45, 140 50 L140 100 C140 105, 135 110, 130 110 L30 110 C25 110, 20 105, 20 100 Z" fill="#3B82F6" />
-                <circle cx="120" cy="90" r="10" fill="#60A5FA" opacity="0.6" />
-                <path d="M116 90 L124 90" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-            </div>
-          </div>
-        </Card>
 
         {/* 4 Metric Stat Cards Grid */}
         <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
@@ -391,16 +367,9 @@ export function DashboardView() {
                     <FileText className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs font-bold text-slate-900 truncate">
                         Nota dari {r.namaToko}
                       </p>
-                      {r.kategori && (
-                        <span className={cn('rounded-full px-2 py-0.5 text-[9.5px] font-bold border', r.badgeColor)}>
-                          {r.kategori}
-                        </span>
-                      )}
-                    </div>
                     <p className="text-[10px] text-slate-400 mt-0.5">
                       {r.tanggal}
                     </p>

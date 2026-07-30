@@ -1,26 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Settings2,
+  Settings,
   Camera,
   Languages,
   FileSpreadsheet,
   Cloud,
-  Palette,
   Trash2,
-  ChevronRight,
   Folder,
-  Image as ImageIcon,
   Loader2,
   ShieldAlert,
-  Info,
-  Moon,
-  Sun,
+  Bell,
+  ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
-import { AppHeader } from '@/components/layout/app-header'
+import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,439 +45,551 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-type Section = 'general' | 'camera' | 'ocr' | 'export' | 'onedrive' | 'display' | 'danger'
+type Section = 'general' | 'camera' | 'ocr' | 'export' | 'onedrive'
 
-const sections: { id: Section; label: string; icon: typeof Settings2 }[] = [
-  { id: 'general', label: 'Umum', icon: Settings2 },
-  { id: 'camera', label: 'Kamera', icon: Camera },
-  { id: 'ocr', label: 'OCR & Bahasa', icon: Languages },
-  { id: 'export', label: 'Ekspor & Format', icon: FileSpreadsheet },
-  { id: 'onedrive', label: 'OneDrive', icon: Cloud },
-  { id: 'display', label: 'Tampilan', icon: Palette },
-  { id: 'danger', label: 'Danger Zone', icon: ShieldAlert },
+const sections: { id: Section; label: string; mobileLabel: string; icon: any }[] = [
+  { id: 'general',  label: 'Umum',           mobileLabel: 'Umum',     icon: Settings },
+  { id: 'camera',   label: 'Kamera',          mobileLabel: 'Kamera',   icon: Camera },
+  { id: 'ocr',      label: 'OCR & Bahasa',    mobileLabel: 'OCR',      icon: Languages },
+  { id: 'export',   label: 'Ekspor & Format', mobileLabel: 'Ekspor',   icon: FileSpreadsheet },
+  { id: 'onedrive', label: 'OneDrive',         mobileLabel: 'OneDrive', icon: Cloud },
 ]
 
 export function SettingsView() {
   const { navigate } = useAppStore()
   const [active, setActive] = useState<Section>('general')
   const [resetting, setResetting] = useState(false)
+  const workspaceId = SINGLE_TENANT_WORKSPACE.id
 
-  // settings state
-  const [language, setLanguage] = useState('id')
+  // General
   const [savePath, setSavePath] = useState('C:\\Users\\User\\Documents\\Notabase\\')
   const [imageFormat, setImageFormat] = useState('png')
   const [deleteAfterUpload, setDeleteAfterUpload] = useState(true)
-  const [autoOcr, setAutoOcr] = useState(true)
+  const [showNotif, setShowNotif] = useState(true)
+
+  // Camera
+  const [cameraAutofocus, setCameraAutofocus] = useState(true)
+  const [cameraGrid, setCameraGrid] = useState(true)
+
+  // OCR
   const [ocrLanguage, setOcrLanguage] = useState('id')
-  const [minConfidence, setMinConfidence] = useState('65')
-  const [excelTemplate, setExcelTemplate] = useState('standard')
-  const [currency, setCurrency] = useState('IDR')
-  const [darkMode, setDarkMode] = useState(false)
-  const [compactView, setCompactView] = useState(false)
+  const [ocrExtractItems, setOcrExtractItems] = useState(true)
+
+  // Export
+  const [excelIncludeLogo, setExcelIncludeLogo] = useState(true)
+  const [excelAutoUpload, setExcelAutoUpload] = useState(false)
+
+  // OneDrive
+  const [onedriveAccount, setOnedriveAccount] = useState('')
+  const [onedriveConnected, setOnedriveConnected] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/settings', {
+      headers: { 'x-workspace-id': workspaceId },
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.save_path)         setSavePath(d.save_path)
+        if (d.image_format)      setImageFormat(d.image_format)
+        if (d.delete_after_upload !== undefined) setDeleteAfterUpload(d.delete_after_upload === 'true' || d.delete_after_upload === true)
+        if (d.show_notif !== undefined)          setShowNotif(d.show_notif === 'true' || d.show_notif === true)
+        if (d.camera_autofocus !== undefined)    setCameraAutofocus(d.camera_autofocus === 'true' || d.camera_autofocus === true)
+        if (d.camera_grid !== undefined)         setCameraGrid(d.camera_grid === 'true' || d.camera_grid === true)
+        if (d.ocr_language)                      setOcrLanguage(d.ocr_language)
+        if (d.ocr_extract_items !== undefined)   setOcrExtractItems(d.ocr_extract_items === 'true' || d.ocr_extract_items === true)
+        if (d.excel_include_logo !== undefined)  setExcelIncludeLogo(d.excel_include_logo === 'true' || d.excel_include_logo === true)
+        if (d.excel_auto_upload !== undefined)   setExcelAutoUpload(d.excel_auto_upload === 'true' || d.excel_auto_upload === true)
+        if (d.onedrive_connected !== undefined)  setOnedriveConnected(d.onedrive_connected === 'true' || d.onedrive_connected === true)
+      })
+      .catch(() => {})
+
+    // Fetch live OneDrive account email from Microsoft Graph API
+    fetch('/api/sync', {
+      headers: { 'x-workspace-id': workspaceId },
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.account) setOnedriveAccount(d.account)
+        if (d.connected !== undefined) setOnedriveConnected(d.connected)
+      })
+      .catch(() => {})
+  }, [workspaceId])
+
+  const saveSetting = async (key: string, val: string) => {
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-workspace-id': workspaceId,
+        },
+        body: JSON.stringify({ workspaceId, key, value: val }),
+      })
+    } catch {}
+  }
 
   const handleReset = async () => {
     setResetting(true)
     try {
-      // Delete all receipts
-      const res = await fetch('/api/receipts?page=1&pageSize=1000')
-      const data = await res.json()
-      await Promise.all(
-        data.data.map((r: { id: string }) =>
-          fetch(`/api/receipts/${r.id}`, { method: 'DELETE' })
-        )
-      )
-      toast.success('Semua data nota telah direset')
+      const res = await fetch('/api/settings', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-workspace-id': workspaceId,
+        },
+        body: JSON.stringify({ workspaceId }),
+      })
+      if (res.ok) {
+        toast.success('Semua pengaturan telah di-reset ke nilai awal.')
+        setSavePath('C:\\Users\\User\\Documents\\Notabase\\')
+        setImageFormat('png')
+        setDeleteAfterUpload(true)
+        setShowNotif(true)
+        setCameraAutofocus(true)
+        setCameraGrid(true)
+        setOcrLanguage('id')
+        setOcrExtractItems(true)
+        setExcelIncludeLogo(true)
+        setExcelAutoUpload(false)
+      } else {
+        toast.error('Gagal mereset pengaturan.')
+      }
     } catch {
-      toast.error('Gagal mereset data')
+      toast.error('Terjadi kesalahan koneksi.')
     } finally {
       setResetting(false)
     }
   }
 
-  return (
-    <div className="min-h-screen pb-24">
-      <AppHeader title="Pengaturan" subtitle="Kelola preferensi akun dan konfigurasi aplikasi Anda." />
-
-      <main className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="grid gap-4 lg:grid-cols-4">
-          {/* Section menu - sidebar on large, horizontal scroll list on small */}
-          <Card className="overflow-hidden lg:col-span-1 lg:sticky lg:top-20 lg:self-start">
-            <div className="no-scrollbar flex overflow-x-auto lg:flex-col lg:overflow-visible">
-              {sections.map((s, i) => {
-                const Icon = s.icon
-                const isActive = active === s.id
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => setActive(s.id)}
-                    className={cn(
-                      'flex shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full',
-                      isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
-                      i > 0 && 'border-l border-border lg:border-l-0 lg:border-t'
-                    )}
-                  >
-                    <Icon className={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
-                    <span className={cn('whitespace-nowrap text-sm font-medium lg:whitespace-normal', isActive ? 'text-primary-foreground' : 'text-foreground')}>
-                      {s.label}
-                    </span>
-                    <ChevronRight className={cn('ml-auto hidden h-4 w-4 lg:block', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
-                  </button>
-                )
-              })}
+  const renderContent = () => (
+    <motion.div
+      key={active}
+      initial={{ opacity: 0, x: 8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.15 }}
+      className="space-y-5"
+    >
+      {/* 1. UMUM */}
+      {active === 'general' && (
+        <Card className="rounded-3xl border border-slate-100/80 dark:border-slate-800 p-5 shadow-2xs bg-white dark:bg-slate-900 space-y-5">
+          <div className="flex items-center gap-3.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100/70 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400">
+              <Settings className="h-5 w-5" />
             </div>
-          </Card>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">Umum</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Pengaturan penyimpanan lokal dan notifikasi.</p>
+            </div>
+          </div>
 
-          {/* Section content */}
-          <motion.div
-            key={active}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className="lg:col-span-3"
-          >
-          {active === 'general' && (
-            <Card className="space-y-4 p-4">
-              <h3 className="text-sm font-bold text-foreground">Pengaturan Umum</h3>
-              <SettingRow
-                label="Bahasa Aplikasi"
-                desc="Pilih bahasa yang digunakan di seluruh aplikasi"
-              >
-                <Select value={language} onValueChange={setLanguage}>
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="id">Bahasa Indonesia</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <Separator />
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Lokasi Simpan Default</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Tempatkan folder Notabase untuk menyimpan nota digital
-                </p>
-                <div className="relative">
-                  <Folder className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={savePath}
-                    onChange={(e) => setSavePath(e.target.value)}
-                    className="pl-9 pr-9"
-                  />
-                  <button className="absolute right-3 top-1/2 -translate-y-1/2 text-primary">
-                    <Folder className="h-4 w-4" />
-                  </button>
-                </div>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Lokasi Penyimpanan Lokal</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={savePath}
+                  onChange={(e) => setSavePath(e.target.value)}
+                  onBlur={() => saveSetting('save_path', savePath)}
+                  className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-mono text-slate-700 dark:text-slate-300 h-10"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => toast.info('Fitur penjelajah folder tersedia di versi desktop installer.')}
+                  className="rounded-2xl shrink-0 border-slate-200 dark:border-slate-700 text-xs font-bold h-10 px-3 flex items-center gap-1.5"
+                >
+                  <Folder className="h-4 w-4 text-slate-500" />
+                  <span className="hidden sm:inline">Ubah</span>
+                </Button>
               </div>
-              <Separator />
-              <SettingRow
-                label="Format Simpan Gambar"
-                desc="Format file untuk digunakan saat pemindaian kamera"
-              >
-                <Select value={imageFormat} onValueChange={setImageFormat}>
-                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="png">PNG (High Quality)</SelectItem>
-                    <SelectItem value="jpg">JPG (Compressed)</SelectItem>
-                    <SelectItem value="webp">WebP (Modern)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">Folder tempat gambar nota hasil scan disimpan secara lokal.</p>
+            </div>
 
-              <Separator />
-              <h3 className="pt-2 text-sm font-bold text-foreground">Privasi & Otomatisasi</h3>
-              <SettingRow
-                label="Hapus Gambar Setelah Upload"
-                desc="Opsi aman untuk menghapus file lokal setelah upload berhasil"
-              >
-                <Switch checked={deleteAfterUpload} onCheckedChange={setDeleteAfterUpload} />
-              </SettingRow>
-            </Card>
-          )}
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
 
-          {active === 'camera' && (
-            <Card className="space-y-4 p-4">
-              <h3 className="text-sm font-bold text-foreground">Pengaturan Kamera</h3>
-              <SettingRow
-                label="Resolusi Default"
-                desc="Resolusi pemindaian kamera"
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Format Gambar</Label>
+              <Select
+                value={imageFormat}
+                onValueChange={(val) => {
+                  setImageFormat(val)
+                  saveSetting('image_format', val)
+                  toast.success(`Format gambar diubah ke ${val.toUpperCase()}`)
+                }}
               >
-                <Select defaultValue="1280x720">
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="640x480">SD (640×480)</SelectItem>
-                    <SelectItem value="1280x720">HD (1280×720)</SelectItem>
-                    <SelectItem value="1920x1080">Full HD</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <Separator />
-              <SettingRow label="Auto Focus" desc="Fokus otomatis saat memindai">
-                <Switch defaultChecked />
-              </SettingRow>
-              <SettingRow label="Flash Otomatis" desc="Aktifkan flash di kondisi gelap">
-                <Switch defaultChecked={false} />
-              </SettingRow>
-              <SettingRow label="Grid Pembantu" desc="Tampilkan grid untuk align nota">
-                <Switch defaultChecked />
-              </SettingRow>
-              <Separator />
-              <div className="flex items-start gap-2 rounded-lg bg-primary/5 p-3 text-[11px] text-muted-foreground">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                <span>Pengaturan kamera diterapkan saat sesi scan berikutnya.</span>
+                <SelectTrigger className="w-full rounded-2xl text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-10">
+                  <SelectValue placeholder="Pilih format" />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl dark:bg-slate-800 dark:border-slate-700">
+                  <SelectItem value="png" className="text-xs">PNG (Kualitas Tinggi, Direkomendasikan)</SelectItem>
+                  <SelectItem value="jpg" className="text-xs">JPG (Ukuran File Lebih Kecil)</SelectItem>
+                  <SelectItem value="webp" className="text-xs">WEBP (Format Modern Web)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Hapus Gambar Setelah Upload</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Otomatis menghapus gambar lokal setelah berhasil diunggah ke OneDrive.</p>
               </div>
-            </Card>
-          )}
+              <Switch
+                checked={deleteAfterUpload}
+                onCheckedChange={(v) => {
+                  setDeleteAfterUpload(v)
+                  saveSetting('delete_after_upload', String(v))
+                  toast.success(v ? 'Pembersihan otomatis diaktifkan' : 'Pembersihan otomatis dinonaktifkan')
+                }}
+              />
+            </div>
 
-          {active === 'ocr' && (
-            <Card className="space-y-4 p-4">
-              <h3 className="text-sm font-bold text-foreground">OCR & Bahasa</h3>
-              <SettingRow
-                label="Bahasa OCR"
-                desc="Bahasa utama untuk pengenalan teks"
-              >
-                <Select value={ocrLanguage} onValueChange={setOcrLanguage}>
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="id">Indonesia</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="both">Indonesia + English</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <Separator />
-              <SettingRow
-                label="Minimum Confidence"
-                desc="Ambang batas akurasi (di bawah ini ditandai warning)"
-              >
-                <Select value={minConfidence} onValueChange={setMinConfidence}>
-                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="50">50%</SelectItem>
-                    <SelectItem value="65">65%</SelectItem>
-                    <SelectItem value="75">75%</SelectItem>
-                    <SelectItem value="85">85%</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <SettingRow
-                label="Auto OCR Setelah Capture"
-                desc="Jalankan OCR otomatis setelah foto diambil"
-              >
-                <Switch checked={autoOcr} onCheckedChange={setAutoOcr} />
-              </SettingRow>
-              <SettingRow
-                label="Ekstrak Item Otomatis"
-                desc="Parse daftar item dari teks nota"
-              >
-                <Switch defaultChecked />
-              </SettingRow>
-            </Card>
-          )}
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
 
-          {active === 'export' && (
-            <Card className="space-y-4 p-4">
-              <h3 className="text-sm font-bold text-foreground">Ekspor & Format</h3>
-              <SettingRow
-                label="Template Excel"
-                desc="Format laporan Excel"
-              >
-                <Select value={excelTemplate} onValueChange={setExcelTemplate}>
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="standard">Standard</SelectItem>
-                    <SelectItem value="detailed">Detailed</SelectItem>
-                    <SelectItem value="minimal">Minimal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <Separator />
-              <SettingRow
-                label="Mata Uang"
-                desc="Simbol mata uang pada laporan"
-              >
-                <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="IDR">IDR (Rp)</SelectItem>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <SettingRow
-                label="Sertakan Logo"
-                desc="Tambahkan logo Notabase di header laporan"
-              >
-                <Switch defaultChecked />
-              </SettingRow>
-              <SettingRow
-                label="Auto Upload ke OneDrive"
-                desc="Unggah laporan ke OneDrive setelah diekspor"
-              >
-                <Switch defaultChecked={false} />
-              </SettingRow>
-            </Card>
-          )}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Notifikasi Sistem</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Tampilkan notifikasi toast saat proses scan, OCR, atau sinkronisasi selesai.</p>
+              </div>
+              <Switch
+                checked={showNotif}
+                onCheckedChange={(v) => {
+                  setShowNotif(v)
+                  saveSetting('show_notif', String(v))
+                  toast.success(v ? 'Notifikasi diaktifkan' : 'Notifikasi dinonaktifkan')
+                }}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
 
-          {active === 'onedrive' && (
-            <Card className="space-y-4 p-4">
+      {/* 2. KAMERA */}
+      {active === 'camera' && (
+        <Card className="rounded-3xl border border-slate-100/80 dark:border-slate-800 p-5 shadow-2xs bg-white dark:bg-slate-900 space-y-5">
+          <div className="flex items-center gap-3.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100/70 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400">
+              <Camera className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">Kamera</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Pengambilan foto nota dan alat bantu kamera.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Autofokus Otomatis</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Mengaktifkan penyesuaian fokus otomatis pada lensa kamera.</p>
+              </div>
+              <Switch
+                checked={cameraAutofocus}
+                onCheckedChange={(v) => {
+                  setCameraAutofocus(v)
+                  saveSetting('camera_autofocus', String(v))
+                  toast.success(v ? 'Autofokus diaktifkan' : 'Autofokus dinonaktifkan')
+                }}
+              />
+            </div>
+
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Garis Kisi (Grid Overlay)</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Tampilkan garis bantu untuk mempermudah perataan dokumen nota.</p>
+              </div>
+              <Switch
+                checked={cameraGrid}
+                onCheckedChange={(v) => {
+                  setCameraGrid(v)
+                  saveSetting('camera_grid', String(v))
+                  toast.success(v ? 'Garis kisi diaktifkan' : 'Garis kisi dinonaktifkan')
+                }}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* 3. OCR & BAHASA */}
+      {active === 'ocr' && (
+        <Card className="rounded-3xl border border-slate-100/80 dark:border-slate-800 p-5 shadow-2xs bg-white dark:bg-slate-900 space-y-5">
+          <div className="flex items-center gap-3.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100/70 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400">
+              <Languages className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">OCR & Bahasa</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Pengenalan teks AI Gemini dan bahasa pengenalan.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Bahasa Utama Nota</Label>
+              <Select
+                value={ocrLanguage}
+                onValueChange={(val) => {
+                  setOcrLanguage(val)
+                  saveSetting('ocr_language', val)
+                  toast.success('Bahasa OCR berhasil diperbarui')
+                }}
+              >
+                <SelectTrigger className="w-full rounded-2xl text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-10">
+                  <SelectValue placeholder="Pilih bahasa" />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl dark:bg-slate-800 dark:border-slate-700">
+                  <SelectItem value="id" className="text-xs">Bahasa Indonesia (Utama)</SelectItem>
+                  <SelectItem value="en" className="text-xs">English (Internasional)</SelectItem>
+                  <SelectItem value="auto" className="text-xs">Deteksi Otomatis (Auto-Detect)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Ekstraksi Rincian Item</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Ekstrak setiap baris barang, kuantitas, dan harga dari nota secara rinci.</p>
+              </div>
+              <Switch
+                checked={ocrExtractItems}
+                onCheckedChange={(v) => {
+                  setOcrExtractItems(v)
+                  saveSetting('ocr_extract_items', String(v))
+                  toast.success(v ? 'Ekstraksi barang diaktifkan' : 'Ekstraksi barang dinonaktifkan')
+                }}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* 4. EKSPOR & FORMAT */}
+      {active === 'export' && (
+        <Card className="rounded-3xl border border-slate-100/80 dark:border-slate-800 p-5 shadow-2xs bg-white dark:bg-slate-900 space-y-5">
+          <div className="flex items-center gap-3.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100/70 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400">
+              <FileSpreadsheet className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">Ekspor & Format</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Konfigurasi file Excel .xlsx dan laporan otomatis.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Sertakan Kop / Logo Instansi</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Menambahkan header resmi Komdigi / NotaBase pada bagian atas file Excel.</p>
+              </div>
+              <Switch
+                checked={excelIncludeLogo}
+                onCheckedChange={(v) => {
+                  setExcelIncludeLogo(v)
+                  saveSetting('excel_include_logo', String(v))
+                  toast.success(v ? 'Kop dokumen diaktifkan' : 'Kop dokumen dinonaktifkan')
+                }}
+              />
+            </div>
+
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Auto Sync Excel ke OneDrive</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Otomatis mengunggah file .xlsx setiap kali ekspor laporan dibuat.</p>
+              </div>
+              <Switch
+                checked={excelAutoUpload}
+                onCheckedChange={(v) => {
+                  setExcelAutoUpload(v)
+                  saveSetting('excel_auto_upload', String(v))
+                  toast.success(v ? 'Auto sync ekspor diaktifkan' : 'Auto sync ekspor dinonaktifkan')
+                }}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* 5. ONEDRIVE */}
+      {active === 'onedrive' && (
+        <Card className="rounded-3xl border border-slate-100/80 dark:border-slate-800 p-5 shadow-2xs bg-white dark:bg-slate-900 space-y-5">
+          <div className="flex items-center gap-3.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100/70 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400">
+              <Cloud className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">OneDrive</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Status sinkronisasi akun cloud Microsoft OneDrive.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Cloud className="h-5 w-5 text-primary" />
-                  <h3 className="text-sm font-bold text-foreground">OneDrive</h3>
-                </div>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600">
-                  Terhubung
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Akun Terhubung</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Aktif
                 </span>
               </div>
-              <div className="space-y-2 rounded-lg bg-muted/40 p-3 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Akun</span>
-                  <span className="font-medium text-foreground">notabase.user@outlook.com</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Folder</span>
-                  <span className="font-mono font-medium text-foreground">Notabase/</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Auto Sync</span>
-                  <span className="font-medium text-foreground">Setiap hari 23:00</span>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => navigate('onedrive')}
-              >
-                Kelola Sinkronisasi
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono">{onedriveAccount}</p>
+            </div>
+
+            <Button
+              onClick={() => navigate('onedrive')}
+              className="w-full rounded-2xl h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-[0.99] transition-all cursor-pointer"
+            >
+              <Cloud className="h-4.5 w-4.5" />
+              <span>Buka Menu Backup & Sinkronisasi OneDrive</span>
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Zona Berbahaya — always visible */}
+      <Card className="rounded-3xl border border-red-100 dark:border-red-950 overflow-hidden shadow-2xs bg-white dark:bg-slate-900">
+        <div className="flex items-center gap-2.5 bg-[#FEF2F2] dark:bg-red-950/40 border-b border-red-100 dark:border-red-900/60 px-5 py-3.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/80 text-red-600 dark:text-red-400">
+            <ShieldAlert className="h-4 w-4" />
+          </div>
+          <h3 className="text-xs sm:text-sm font-extrabold text-[#DC2626] dark:text-red-400">Zona Berbahaya</h3>
+        </div>
+
+        <div className="p-5 space-y-3.5">
+          <div>
+            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Reset Semua Pengaturan</h4>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Kembalikan semua konfigurasi ke pengaturan pabrik. Tindakan ini tidak dapat dibatalkan.
+            </p>
+          </div>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button className="w-full rounded-2xl h-11 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-red-600/20 active:scale-[0.99] transition-all cursor-pointer">
+                <Trash2 className="h-4 w-4" />
+                <span>Reset Pengaturan</span>
               </Button>
-              <Button
-                variant="outline"
-                className="w-full text-destructive"
-                onClick={() => toast.info('Memutuskan OneDrive...')}
-              >
-                Putuskan Koneksi
-              </Button>
-            </Card>
-          )}
-
-          {active === 'display' && (
-            <Card className="space-y-4 p-4">
-              <h3 className="text-sm font-bold text-foreground">Tampilan</h3>
-              <SettingRow
-                label="Mode Gelap"
-                desc="Aktifkan tema gelap"
-                icon={darkMode ? Moon : Sun}
-              >
-                <Switch checked={darkMode} onCheckedChange={setDarkMode} />
-              </SettingRow>
-              <Separator />
-              <SettingRow
-                label="Tampilan Kompak"
-                desc="Kurangi spacing untuk lebih banyak konten"
-              >
-                <Switch checked={compactView} onCheckedChange={setCompactView} />
-              </SettingRow>
-              <SettingRow
-                label="Ukuran Font"
-                desc="Ukuran teks aplikasi"
-              >
-                <Select defaultValue="medium">
-                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="small">Kecil</SelectItem>
-                    <SelectItem value="medium">Sedang</SelectItem>
-                    <SelectItem value="large">Besar</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-            </Card>
-          )}
-
-          {active === 'danger' && (
-            <Card className="overflow-hidden border-destructive/30">
-              <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-3">
-                <ShieldAlert className="h-5 w-5 text-destructive" />
-                <h3 className="text-sm font-bold text-destructive">Danger Zone</h3>
-              </div>
-              <div className="space-y-4 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Reset Data</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Hapus semua nota, riwayat OCR, dan log sinkronisasi dari
-                    database lokal. Tindakan ini tidak dapat dibatalkan.
-                  </p>
-                </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="w-full">
-                      <Trash2 className="mr-2 h-4 w-4" /> Reset Semua Data
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Reset semua data?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Semua nota dan riwayat akan dihapus permanen. Pastikan
-                        Anda telah mengekspor data penting sebelum melanjutkan.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Batal</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleReset}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        {resetting ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="mr-2 h-4 w-4" />
-                        )}
-                        Ya, Reset
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            </Card>
-          )}
-        </motion.div>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="rounded-3xl dark:bg-slate-900 dark:border-slate-800">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="font-extrabold dark:text-slate-100">Reset semua pengaturan?</AlertDialogTitle>
+                <AlertDialogDescription className="text-xs dark:text-slate-400">
+                  Semua konfigurasi akan dikembalikan ke nilai awal. Tindakan ini tidak dapat dibatalkan.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-xl text-xs font-semibold dark:bg-slate-800 dark:text-slate-200">Batal</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleReset}
+                  className="rounded-xl bg-red-600 text-white hover:bg-red-700 text-xs font-bold"
+                >
+                  {resetting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                  Ya, Reset
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
+      </Card>
 
-        {/* App info */}
-        <div className="mt-6 flex flex-col items-center gap-1 text-center">
-          <p className="text-[11px] font-semibold text-muted-foreground">
-            Notabase v1.0.0
-          </p>
-          <p className="text-[10px] text-muted-foreground/70">
-            Digital Receipt Management System · BPSDMP KOMINFO MANADO
-          </p>
-        </div>
-      </main>
-    </div>
-  )
-}
-
-function SettingRow({
-  label,
-  desc,
-  children,
-  icon: Icon,
-}: {
-  label: string
-  desc: string
-  children: React.ReactNode
-  icon?: typeof Settings2
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
-          <p className="text-sm font-medium text-foreground">{label}</p>
-        </div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{desc}</p>
+      {/* Footer */}
+      <div className="pt-1 pb-4 text-center space-y-0.5">
+        <p className="text-xs font-bold text-slate-400 dark:text-slate-500">NotaBase v1.0.0</p>
+        <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+          Digital Receipt Management – BPPKI MANADO (DEPKOMINFO)
+        </p>
       </div>
-      <div className="shrink-0">{children}</div>
+    </motion.div>
+  )
+
+  return (
+    <div className="w-full pb-20">
+
+      {/* ── DESKTOP LAYOUT ── */}
+      <div className="hidden md:block space-y-5">
+        {/* Desktop 2-column: Left nav + Right content */}
+        <div className="flex gap-5 items-start">
+          {/* Left sidebar nav */}
+          <Card className="w-56 shrink-0 border border-slate-100/80 dark:border-slate-800 shadow-2xs bg-white dark:bg-slate-900 rounded-3xl p-3 space-y-1">
+            {sections.map((s) => {
+              const Icon = s.icon
+              const isActive = active === s.id
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setActive(s.id)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-xs font-semibold transition-all text-left group',
+                    isActive
+                      ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      'h-4 w-4 shrink-0',
+                      isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300',
+                    )}
+                  />
+                  <span className="truncate">{s.label}</span>
+                </button>
+              )
+            })}
+          </Card>
+
+          {/* Right content */}
+          <div className="flex-1 min-w-0">
+            {renderContent()}
+          </div>
+        </div>
+      </div>
+
+      {/* ── MOBILE LAYOUT ── */}
+      <div className="md:hidden space-y-4">
+        {/* Mobile header */}
+        <div className="flex items-center justify-between -mx-4 -mt-5 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-30">
+          <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Pengaturan</span>
+          <button className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <Bell className="h-5 w-5" />
+            <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-white">
+              1
+            </span>
+          </button>
+        </div>
+
+        {/* Mobile horizontal icon tab bar */}
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar bg-white dark:bg-slate-900 p-2 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-2xs">
+          {sections.map((s) => {
+            const Icon = s.icon
+            const isActive = active === s.id
+            return (
+              <button
+                key={s.id}
+                onClick={() => setActive(s.id)}
+                className={cn(
+                  'shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl px-3 py-2 text-[10px] font-semibold transition-all min-w-[56px]',
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800',
+                )}
+              >
+                <Icon className={cn('h-4 w-4', isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500')} />
+                <span>{s.mobileLabel}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Mobile content */}
+        {renderContent()}
+      </div>
     </div>
   )
 }

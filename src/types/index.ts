@@ -1,95 +1,78 @@
-// Notabase shared types
+/**
+ * types/index.ts
+ * Notabase application types barrel.
+ * Re-exports shared domain types from shared/types + UI navigation types.
+ *
+ * Dokumen acuan:
+ *   04-database-schema.md  — struktur data
+ *   03-business-rules.md   — enum & aturan validasi
+ *   02-design-system.md    — NavTab (5 item), AppView
+ */
 
-export type ReceiptStatus = "verified" | "pending" | "failed";
+// Re-export all domain types from shared/types
+export * from '@/shared/types'
 
-export interface ReceiptItem {
-  name: string;
-  qty: number;
-  price: number;
-  total: number;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// UI Navigation & View Types
+// ─────────────────────────────────────────────────────────────────────────────
 
-export interface Receipt {
-  id: string;
-  invoiceNumber: string | null;
-  merchantName: string;
-  transactionDate: string; // ISO string
-  category: string | null;
-  total: number;
-  description: string | null;
-  imageUrl: string | null;
-  ocrText: string | null;
-  confidence: number;
-  status: ReceiptStatus;
-  items: ReceiptItem[] | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Category {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-}
-
-export interface UploadLog {
-  id: string;
-  receiptId: string | null;
-  status: "pending" | "success" | "failed";
-  provider: "local" | "onedrive";
-  fileName: string | null;
-  fileSize: number | null;
-  message: string | null;
-  uploadedAt: string;
-}
-
-export interface SyncLog {
-  id: string;
-  fileName: string;
-  status: "pending" | "uploading" | "success" | "failed";
-  progress: number;
-  fileSize: number | null;
-  provider: "onedrive";
-  message: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface OcrResult {
-  invoiceNumber: string | null;
-  merchantName: string;
-  transactionDate: string | null;
-  total: number;
-  category: string | null;
-  description: string | null;
-  items: ReceiptItem[];
-  ocrText: string;
-  confidence: number;
-}
-
-// Dashboard analytics
-export interface DashboardStats {
-  today: { count: number; total: number };
-  week: { count: number; total: number };
-  month: { count: number; total: number };
-  allTime: { count: number; total: number };
-  chart: { label: string; value: number }[];
-  topCategories: { name: string; count: number; total: number }[];
-  topMerchants: { name: string; count: number; total: number }[];
-  recent: Receipt[];
-}
-
-// Navigation
+/** Full set of application views/screens. */
 export type AppView =
-  | "splash"
-  | "dashboard"
-  | "scan"
-  | "ocr-preview"
-  | "history"
-  | "detail"
-  | "report"
-  | "onedrive"
-  | "settings";
+  | 'workspace-setup'   // onboarding — buat/gabung workspace (BR-WS-01)
+  | 'splash'
+  | 'dashboard'
+  | 'scan'
+  | 'ocr-preview'
+  | 'history'
+  | 'detail'
+  | 'report'            // export Excel (PRD §9)
+  | 'onedrive'
+  | 'settings'
+  | 'search'
+  | 'upload-progress'
+  | 'gallery'
 
-export type NavTab = "dashboard" | "scan" | "history" | "settings";
+/** Bottom navigation tabs — 5 item tetap (02-design-system.md §3.1). */
+export type NavTab =
+  | 'dashboard'
+  | 'scan'
+  | 'history'
+  | 'report'
+  | 'settings'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// App Settings Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AppSettingKey =
+  | 'bahasa'
+  | 'format_gambar'
+  | 'hapus_setelah_upload'
+  | 'folder_simpan_default'
+  | 'tema'
+  | 'kategori_custom'
+  | 'nama_perangkat'
+  | 'receipt_template_default'
+
+export interface AppSetting {
+  id: string
+  workspaceId: string
+  key: AppSettingKey | string
+  value: unknown
+  updatedAt: string
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard Analytics Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  today: { count: number; total: number }
+  week: { count: number; total: number }
+  month: { count: number; total: number }
+  allTime: { count: number; total: number }
+  chart: { label?: string; name?: string; value: number }[]
+  chartMonthly?: { label?: string; name?: string; value: number }[]
+  topMerchants: { name: string; count: number; total: number }[]
+  recent: import('@/shared/types').Receipt[]
+}

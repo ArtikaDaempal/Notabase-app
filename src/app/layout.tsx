@@ -15,12 +15,26 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Notabase - Digital Receipt Management System",
+  title: "Notabase Komdigi Manado",
   description: "Kelola nota digital Anda dengan OCR, analitik, dan sinkronisasi cloud.",
   keywords: ["Notabase", "receipt", "OCR", "nota digital", "BPSDMP KOMINFO"],
   authors: [{ name: "BPSDMP KOMINFO MANADO" }],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Notabase",
+  },
   icons: {
-    icon: "/logo.svg",
+    icon: [
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png" },
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/icons/icon-192x192.png",
   },
 };
 
@@ -28,8 +42,11 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#2563EB",
+  themeColor: "#FFFFFF",
 };
+
+import Script from "next/script";
+import { Providers } from "@/app/providers";
 
 export default function RootLayout({
   children,
@@ -38,12 +55,49 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" suppressHydrationWarning>
+      <head />
       <body
         className={`${inter.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster />
-        <SonnerToaster position="top-center" richColors />
+        <Script
+          id="darkmode-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var darkMode = localStorage.getItem('notabase_dark_mode');
+                  if (darkMode === 'true') {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+        <Providers>
+          {children}
+          <Toaster />
+          <SonnerToaster position="top-center" richColors />
+          {/* PWA Service Worker Registration */}
+          <Script
+            id="pwa-sw"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+                if ('serviceWorker' in navigator) {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js')
+                      .then(function(reg) { console.log('[Notabase PWA] SW registered:', reg.scope); })
+                      .catch(function(err) { console.warn('[Notabase PWA] SW failed:', err); });
+                  });
+                }
+              `,
+            }}
+          />
+        </Providers>
       </body>
     </html>
   );

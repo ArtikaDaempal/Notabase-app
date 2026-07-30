@@ -1,61 +1,182 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { getWorkspaceDb } from '@/lib/db'
 import { serializeReceipt } from '@/lib/serialize'
-import type { ReceiptItem } from '@/types'
+import { receiptCache } from '@/lib/receipt-cache'
 
-// GET /api/receipts/[id]
+/**
+ * GET /api/receipts/[id]
+ * Fetch satu nota beserta item-nya.
+ */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const receipt = await db.receipt.findUnique({ where: { id } })
-  if (!receipt) {
-    return NextResponse.json({ error: 'Receipt not found' }, { status: 404 })
+  const rawWorkspaceId = req.headers.get('x-workspace-id') || '00000000-0000-4000-a000-000000000000'
+  const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+  const workspaceId = isUuid(rawWorkspaceId) ? rawWorkspaceId : '00000000-0000-4000-a000-000000000000'
+  const client = getWorkspaceDb(workspaceId)
+
+  try {
+    const { data: receipt, error } = await client
+      .from('receipts')
+      .select('*')
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .single()
+
+    if (receipt && !error) {
+      const { data: dbItems } = await client
+        .from('receipt_items')
+        .select('*')
+        .eq('receipt_id', id)
+        .order('urutan', { ascending: true })
+
+      const items = (dbItems || []).map((item) => ({
+        namaBarang: item.nama_barang,
+        qty: item.qty,
+        harga: item.harga,
+        subtotal: item.subtotal,
+        urutan: item.urutan,
+        name: item.nama_barang,
+        price: item.harga,
+        total: item.subtotal,
+      }))
+
+      const result = {
+        ...serializeReceipt(receipt, items),
+        merchantName: receipt.nama_toko,
+        invoiceNumber: receipt.receipt_number,
+        transactionDate: receipt.tanggal,
+        total: receipt.nominal,
+        status: receipt.status_ocr,
+        description: receipt.keterangan,
+        ocrText: receipt.ocr_raw_text,
+        confidence: receipt.ocr_confidence,
+      }
+
+      receiptCache.addReceipt(result)
+      return NextResponse.json(result)
+    }
+  } catch (err) {
+    console.warn(`[API /api/receipts/${id} GET] Supabase query warning:`, err)
   }
-  return NextResponse.json(serializeReceipt(receipt))
+
+  // Fallback to shared in-memory receiptCache
+  const cached = receiptCache.getReceipt(id)
+  if (cached) {
+    return NextResponse.json(cached)
+  }
+
+  return NextResponse.json({ error: 'Nota tidak ditemukan' }, { status: 404 })
 }
 
-// PUT /api/receipts/[id]
+/**
+ * PUT /api/receipts/[id]
+ * Update nota.
+ */
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+  const rawWsId83 = req.headers.get('x-workspace-id') || '00000000-0000-4000-a000-000000000000'
+  const isUuid83 = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  const workspaceId = isUuid83(rawWsId83) ? rawWsId83 : '00000000-0000-4000-a000-000000000000'
+  const client = getWorkspaceDb(workspaceId)
   const body = await req.json()
-  const existing = await db.receipt.findUnique({ where: { id } })
-  if (!existing) {
-    return NextResponse.json({ error: 'Receipt not found' }, { status: 404 })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: Record<string, any> = {
+    updated_at: new Date().toISOString(),
   }
-  const updated = await db.receipt.update({
-    where: { id },
-    data: {
-      invoiceNumber: body.invoiceNumber ?? existing.invoiceNumber,
-      merchantName: body.merchantName ?? existing.merchantName,
-      transactionDate: body.transactionDate ? new Date(body.transactionDate) : existing.transactionDate,
-      category: body.category ?? existing.category,
-      total: body.total !== undefined ? Number(body.total) : existing.total,
-      description: body.description ?? existing.description,
-      imageUrl: body.imageUrl ?? existing.imageUrl,
-      ocrText: body.ocrText ?? existing.ocrText,
-      confidence: body.confidence !== undefined ? Number(body.confidence) : existing.confidence,
-      status: body.status ?? existing.status,
-      items: body.items !== undefined ? (body.items ? JSON.stringify(body.items as ReceiptItem[]) : null) : existing.items,
-    },
+
+  if (body.receiptNumber !== undefined) updateData.receipt_number = body.receiptNumber
+  if (body.namaToko !== undefined) updateData.nama_toko = body.namaToko
+  if (body.tanggal !== undefined) updateData.tanggal = body.tanggal
+  if (body.nominal !== undefined) updateData.nominal = Number(body.nominal)
+  if (body.diskon !== undefined) updateData.diskon = Number(body.diskon)
+  if (body.pajak !== undefined) updateData.pajak = Number(body.pajak)
+  if (body.kategori !== undefined) updateData.kategori = body.kategori
+  if (body.metodePembayaran !== undefined) updateData.metode_pembayaran = body.metodePembayaran
+  if (body.keterangan !== undefined) updateData.keterangan = body.keterangan
+  if (body.imageUrl !== undefined) updateData.image_url = body.imageUrl
+  if (body.ocrRawText !== undefined) updateData.ocr_raw_text = body.ocrRawText
+  if (body.ocrConfidence !== undefined) updateData.ocr_confidence = Number(body.ocrConfidence)
+  if (body.statusOcr !== undefined) updateData.status_ocr = body.statusOcr
+  if (body.receiptTemplate !== undefined) updateData.receipt_template = body.receiptTemplate
+
+  // Aliases
+  if (body.invoiceNumber !== undefined && updateData.receipt_number === undefined) updateData.receipt_number = body.invoiceNumber
+  if (body.merchantName !== undefined && updateData.nama_toko === undefined) updateData.nama_toko = body.merchantName
+  if (body.transactionDate !== undefined && updateData.tanggal === undefined) updateData.tanggal = body.transactionDate?.split('T')[0]
+  if (body.total !== undefined && updateData.nominal === undefined) updateData.nominal = Number(body.total)
+  if (body.description !== undefined && updateData.keterangan === undefined) updateData.keterangan = body.description
+  if (body.ocrText !== undefined && updateData.ocr_raw_text === undefined) updateData.ocr_raw_text = body.ocrText
+  if (body.confidence !== undefined && updateData.ocr_confidence === undefined) updateData.ocr_confidence = Number(body.confidence)
+  if (body.status !== undefined && updateData.status_ocr === undefined) updateData.status_ocr = body.status
+
+  try {
+    const { data: updated } = await client
+      .from('receipts')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .update(updateData as any)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (updated) {
+      if (body.items !== undefined && Array.isArray(body.items)) {
+        await client.from('receipt_items').delete().eq('receipt_id', id)
+        if (body.items.length > 0) {
+          const itemsToInsert = body.items.map((item: any, idx: number) => ({
+            receipt_id: id,
+            nama_barang: item.namaBarang ?? item.name ?? '',
+            qty: item.qty ?? 1,
+            harga: item.harga ?? item.price ?? 0,
+            urutan: item.urutan ?? idx,
+          }))
+          await client.from('receipt_items').insert(itemsToInsert)
+        }
+      }
+    }
+  } catch (updateErr) {
+    console.warn(`[API /api/receipts/${id} PUT] Supabase update warning:`, updateErr)
+  }
+
+  // Always update in shared cache
+  const updatedCache = receiptCache.updateReceipt(id, {
+    ...body,
+    items: body.items,
   })
-  return NextResponse.json(serializeReceipt(updated))
+
+  return NextResponse.json(updatedCache || { success: true, id })
 }
 
-// DELETE /api/receipts/[id]
+/**
+ * DELETE /api/receipts/[id]
+ */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const existing = await db.receipt.findUnique({ where: { id } })
-  if (!existing) {
-    return NextResponse.json({ error: 'Receipt not found' }, { status: 404 })
+  const rawWsId162 = req.headers.get('x-workspace-id') || '00000000-0000-4000-a000-000000000000'
+  const isUuid162 = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  const workspaceId = isUuid162(rawWsId162) ? rawWsId162 : '00000000-0000-4000-a000-000000000000'
+  const client = getWorkspaceDb(workspaceId)
+
+  try {
+    await client.from('receipt_items').delete().eq('receipt_id', id)
+    await client.from('receipts').delete().eq('id', id)
+  } catch (delErr) {
+    console.warn(`[API /api/receipts/${id} DELETE] Supabase delete warning:`, delErr)
   }
-  await db.receipt.delete({ where: { id } })
+
+  receiptCache.deleteReceipt(id)
   return NextResponse.json({ success: true })
 }
+
+// PATCH alias for PUT
+export const PATCH = PUT
+

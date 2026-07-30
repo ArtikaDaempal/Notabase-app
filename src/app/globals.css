@@ -3,6 +3,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Prevent system dark mode from auto-activating — only use .dark class explicitly set by user */
+@media (prefers-color-scheme: dark) {
+  html:not(.dark) {
+    color-scheme: light;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -79,6 +86,73 @@
   --sidebar-ring: oklch(0.546 0.215 262);
 }
 
+/* =======================================================================
+   NOTABASE SEMANTIC DESIGN TOKENS (02-design-system.md §2)
+   Dipakai oleh komponen sebagai referensi warna semantik.
+   Prefix --nb- untuk membedakan dari token shadcn/Tailwind.
+   ======================================================================= */
+:root {
+  /* Brand */
+  --nb-brand-primary:       #1D4ED8;   /* tombol utama, active nav */
+  --nb-brand-dark:          #1E3A8A;   /* logo "Notabase", heading kuat */
+  --nb-brand-light:         #EFF3FB;   /* background gradient utama */
+
+  /* Semantic */
+  --nb-success:             #16A34A;   /* badge Selesai, OCR berhasil */
+  --nb-success-bg:          #DCFCE7;
+  --nb-danger:              #DC2626;   /* Hapus, Zona Berbahaya */
+  --nb-danger-bg:           #FEE2E2;
+  --nb-warning:             #CA8A04;   /* Perlu Review (OCR 50-79%) */
+  --nb-warning-bg:          #FEF9C3;
+  --nb-action-secondary:    #15803D;   /* tombol Export ke Excel (hijau tua) */
+  --nb-info:                #2563EB;   /* link "Lihat Semua", info banner */
+
+  /* Kategori nota tag colors (03-business-rules.md §8) */
+  --nb-tag-atk:             #16A34A;
+  --nb-tag-operasional:     #6B7280;
+  --nb-tag-konsumsi:        #059669;
+  --nb-tag-transportasi:    #2563EB;
+  --nb-tag-utilitas:        #7C3AED;
+  --nb-tag-referensi:       #0891B2;
+  --nb-tag-lainnya:         #94A3B8;
+
+  /* Receipt type badge colors (02-design-system.md §3.5) */
+  --nb-badge-scan:          #2563EB;   /* biru */
+  --nb-badge-gallery:       #7C3AED;   /* ungu */
+  --nb-badge-manual:        #6B7280;   /* abu-abu */
+
+  /* Neutral */
+  --nb-bg-app:              #EFF3FB;
+  --nb-bg-card:             #FFFFFF;
+  --nb-border:              #E2E8F0;
+  --nb-text-primary:        #0F172A;
+  --nb-text-secondary:      #64748B;
+  --nb-text-muted:          #94A3B8;
+
+  /* Spacing & Radius (02-design-system.md §2.3) */
+  --nb-radius-card:         16px;      /* kartu utama */
+  --nb-radius-input:        10px;      /* input, dropdown */
+  --nb-radius-pill:         999px;     /* badge, tombol utama, nav aktif */
+  --nb-space-page:          20px;      /* padding horizontal halaman */
+  --nb-space-card-gap:      16px;
+
+  /* Shadow */
+  --nb-shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+/* Dark mode overrides for Notabase semantic tokens (02-design-system.md §5) */
+[data-theme="dark"],
+html.dark {
+  --nb-bg-app:              #0B1220;
+  --nb-bg-card:             #131C2E;
+  --nb-text-primary:        #F1F5F9;   /* 15.1:1 contrast vs #0B1220 */
+  --nb-text-secondary:      #94A3B8;   /* 7.2:1 contrast vs #0B1220 */
+  --nb-border:              #1E293B;
+  --nb-brand-primary:       #3B82F6;   /* Brightened for WCAG 4.5:1 on dark bg */
+  --nb-brand-dark:          #60A5FA;
+  --nb-brand-light:         #1E293B;
+}
+
 .dark {
   --background: oklch(0.17 0.02 256);
   --foreground: oklch(0.985 0 0);
@@ -115,13 +189,57 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
-  body {
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     WCAG 2.1 AA ACCESSIBILITY GUIDELINES & UTILITIES
+     ───────────────────────────────────────────────────────────────────────── */
+
+  /* 1. Visible Focus Ring (WCAG 2.1 AA Success Criterion 2.4.7) */
+  *:focus-visible {
+    outline: 2px solid var(--nb-brand-primary) !important;
+    outline-offset: 2px !important;
+  }
+
+  /* 2. Target Size & Touch Target (WCAG 2.1 AA Success Criterion 2.5.5) */
+  button:not(.inline-link),
+  [role="button"],
+  input[type="submit"],
+  input[type="reset"],
+  input[type="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  body,
+  body[data-scroll-locked],
+  html[data-scroll-locked] {
     @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    scrollbar-gutter: stable;
+    padding-right: 0px !important;
+    margin-right: 0px !important;
+    overflow: auto !important;
+  }
+
+  html {
+    scrollbar-gutter: stable;
   }
 }
+
+/* 3. Reduced Motion (WCAG 2.1 AA Success Criterion 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 
 /* Custom scrollbar */
 .scrollbar-thin::-webkit-scrollbar {
@@ -161,3 +279,284 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* =============================================
+   Comprehensive Dark Mode Overrides
+   Only applied when html has .dark class
+   (set explicitly by user, not OS preference)
+   ============================================= */
+
+html.dark {
+  --background: oklch(0.14 0.02 256);
+  --foreground: oklch(0.96 0.005 256);
+  --card: oklch(0.19 0.025 256);
+  --card-foreground: oklch(0.96 0.005 256);
+  --popover: oklch(0.19 0.025 256);
+  --popover-foreground: oklch(0.96 0.005 256);
+  --primary: oklch(0.62 0.2 262);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.26 0.02 256);
+  --secondary-foreground: oklch(0.96 0.005 256);
+  --muted: oklch(0.25 0.02 256);
+  --muted-foreground: oklch(0.72 0.015 256);
+  --border: oklch(0.28 0.02 256);
+  --input: oklch(0.28 0.02 256);
+  --ring: oklch(0.62 0.2 262);
+}
+
+html.dark,
+html.dark body,
+html.dark .bg-\[\#F8FAFF\],
+html.dark main {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
+/* Base Card & Header Backgrounds */
+html.dark .bg-white,
+html.dark .bg-white\/80,
+html.dark .bg-white\/90,
+html.dark .bg-white\/95,
+html.dark header,
+html.dark .bg-card,
+html.dark [role="dialog"] {
+  background-color: var(--card) !important;
+  color: var(--card-foreground) !important;
+  border-color: var(--border) !important;
+}
+
+/* Gradient Cards in Dark Mode */
+html.dark .bg-gradient-to-r,
+html.dark .bg-gradient-to-b {
+  background-image: linear-gradient(to right, oklch(0.2 0.03 256), oklch(0.17 0.04 262)) !important;
+  border-color: var(--border) !important;
+}
+
+/* Button & Nav Text Styling */
+html.dark button {
+  color: var(--foreground);
+}
+
+html.dark button.bg-blue-600,
+html.dark .bg-blue-600 {
+  color: #ffffff !important;
+  background-color: #2563eb !important;
+}
+
+html.dark button.text-slate-700,
+html.dark button.text-slate-600 {
+  color: var(--foreground) !important;
+}
+
+html.dark button.text-slate-700:hover,
+html.dark button.text-slate-600:hover {
+  background-color: var(--muted) !important;
+}
+
+/* Text Colors */
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 {
+  color: var(--foreground) !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-slate-500 {
+  color: oklch(0.8 0.01 256) !important;
+}
+
+html.dark .text-slate-400,
+html.dark .text-slate-300 {
+  color: oklch(0.7 0.015 256) !important;
+}
+
+html.dark label,
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  color: var(--foreground) !important;
+}
+
+html.dark p {
+  color: oklch(0.82 0.01 256) !important;
+}
+
+/* Brand & Accent Colors in Dark Mode */
+html.dark .text-blue-600,
+html.dark .text-blue-500,
+html.dark .text-blue-700 {
+  color: #60a5fa !important;
+}
+
+html.dark .text-emerald-600,
+html.dark .text-emerald-500,
+html.dark .text-emerald-700 {
+  color: #34d399 !important;
+}
+
+html.dark .text-purple-600,
+html.dark .text-purple-500 {
+  color: #c084fc !important;
+}
+
+html.dark .text-amber-600,
+html.dark .text-amber-500 {
+  color: #fbbf24 !important;
+}
+
+html.dark .text-red-500,
+html.dark .text-red-600,
+html.dark .text-\[\#DC2626\] {
+  color: #f87171 !important;
+}
+
+/* Color Backgrounds & Badges in Dark Mode */
+html.dark .bg-slate-50,
+html.dark .bg-slate-100,
+html.dark .bg-slate-50\/70 {
+  background-color: var(--muted) !important;
+  color: var(--foreground) !important;
+}
+
+html.dark .bg-blue-50,
+html.dark .bg-blue-50\/80,
+html.dark .bg-blue-50\/70,
+html.dark .bg-\[\#EEF4FF\] {
+  background-color: rgba(30, 58, 138, 0.35) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+  color: #93c5fd !important;
+}
+
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-50\/80,
+html.dark .bg-\[\#EDF9F1\] {
+  background-color: rgba(6, 78, 59, 0.35) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #6ee7b7 !important;
+}
+
+html.dark .bg-purple-50,
+html.dark .bg-purple-100 {
+  background-color: rgba(88, 28, 135, 0.35) !important;
+  border-color: rgba(168, 85, 247, 0.3) !important;
+  color: #d8b4fe !important;
+}
+
+html.dark .bg-amber-50 {
+  background-color: rgba(120, 53, 15, 0.35) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  color: #fde047 !important;
+}
+
+html.dark .bg-red-50,
+html.dark .bg-\[\#FEF2F2\] {
+  background-color: rgba(127, 29, 29, 0.35) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #fca5a5 !important;
+}
+
+/* Hover States in Dark Mode */
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-100:hover {
+  background-color: oklch(0.26 0.02 256) !important;
+}
+
+/* Form Controls & Inputs */
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: var(--muted) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: oklch(0.65 0.01 256) !important;
+}
+
+/* Select Popups & Radix Components */
+html.dark [role="combobox"],
+html.dark [data-radix-select-trigger] {
+  background-color: var(--muted) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+html.dark [role="listbox"],
+html.dark [data-radix-select-content],
+html.dark [data-radix-popper-content-wrapper] > div {
+  background-color: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--foreground) !important;
+}
+
+html.dark [role="option"],
+html.dark [data-radix-select-item] {
+  color: var(--foreground) !important;
+}
+
+html.dark [role="option"]:hover,
+html.dark [role="option"]:focus,
+html.dark [data-radix-select-item][data-highlighted] {
+  background-color: var(--muted) !important;
+  color: var(--foreground) !important;
+}
+
+/* Switch Component */
+html.dark [role="switch"] {
+  border-color: var(--border);
+}
+
+html.dark [role="switch"]:not([data-state="checked"]) {
+  background-color: var(--muted) !important;
+}
+
+/* Borders & Dividers */
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-slate-100\/80,
+html.dark .divide-slate-100 > *,
+html.dark .divide-y > * {
+  border-color: var(--border) !important;
+}
+
+/* Table Styling in Dark Mode */
+html.dark tr {
+  border-color: var(--border) !important;
+}
+
+html.dark th {
+  background-color: var(--muted) !important;
+  color: oklch(0.8 0.01 256) !important;
+}
+
+html.dark td {
+  color: var(--foreground) !important;
+}
+
+/* Fixed Bottom Navigation Bar */
+html.dark nav.fixed,
+html.dark .fixed.bottom-0 {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+}
+
+/* Dialogs & Modals */
+html.dark [role="alertdialog"],
+html.dark [role="dialog"] {
+  background-color: var(--card) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+/* Separator */
+html.dark [role="separator"],
+html.dark hr {
+  border-color: var(--border) !important;
+  background-color: var(--border) !important;
+}
+

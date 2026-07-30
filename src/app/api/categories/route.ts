@@ -1,21 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { NextResponse } from 'next/server'
 
-// GET /api/categories
+// GET /api/categories — Stubbed route since categories are removed
 export async function GET() {
-  const cats = await db.category.findMany({ orderBy: { name: 'asc' } })
-  return NextResponse.json(cats)
+  return NextResponse.json([])
 }
 
-// POST /api/categories
-export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const created = await db.category.create({
-    data: {
-      name: body.name,
-      color: body.color || '#2563EB',
-      icon: body.icon || 'Tag',
-    },
-  })
-  return NextResponse.json(created, { status: 201 })
+// POST /api/categories — Stubbed route
+export async function POST() {
+  return NextResponse.json({ success: true, message: 'Categories are deprecated' }, { status: 201 })
 }

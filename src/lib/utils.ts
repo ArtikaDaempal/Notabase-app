@@ -239,3 +239,93 @@ export function extractAddressFromOcr(ocrText?: string | null): string {
   }
   return ''
 }
+
+/** Generate a clean, human-readable Indonesian filename for Excel exports */
+export function getReportFilename(options?: {
+  period?: 'weekly' | 'monthly' | 'yearly' | string | null
+  startDate?: string | null
+  endDate?: string | null
+  month?: number | null
+  year?: number | null
+}): string {
+  const INDO_MONTHS = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+  ]
+
+  const now = new Date()
+  let y = options?.year || (options?.startDate ? new Date(options.startDate).getFullYear() : now.getFullYear())
+  if (isNaN(y) || y < 2000) y = now.getFullYear()
+
+  let mIdx = now.getMonth()
+  if (typeof options?.month === 'number') {
+    mIdx = options.month >= 1 && options.month <= 12 ? options.month - 1 : options.month
+  } else if (options?.startDate) {
+    const parsed = new Date(options.startDate)
+    if (!isNaN(parsed.getTime())) mIdx = parsed.getMonth()
+  }
+
+  const monthName = INDO_MONTHS[mIdx] || 'Juli'
+  const p = options?.period
+
+  // 1. Tahunan (Yearly)
+  if (p === 'yearly' || (options?.startDate && options?.endDate && isFullYearRange(options.startDate, options.endDate))) {
+    return `Laporan Nota Tahun ${y}.xlsx`
+  }
+
+  // 2. Mingguan (Weekly)
+  if (p === 'weekly' || (options?.startDate && options?.endDate && isWeeklyRange(options.startDate, options.endDate))) {
+    const sDate = options?.startDate ? new Date(options.startDate) : now
+    const day = isNaN(sDate.getTime()) ? 1 : sDate.getDate()
+    const weekNum = Math.min(5, Math.max(1, Math.ceil(day / 7)))
+    const mName = isNaN(sDate.getTime()) ? monthName : (INDO_MONTHS[sDate.getMonth()] || monthName)
+    const yNum = isNaN(sDate.getTime()) ? y : sDate.getFullYear()
+
+    return `Laporan Nota Minggu ke-${weekNum} Bulan ${mName} ${yNum}.xlsx`
+  }
+
+  // 3. Bulanan (Monthly) / Default
+  if (p === 'monthly' || !options?.startDate || !options?.endDate || isSameMonth(options.startDate, options.endDate)) {
+    return `Laporan Nota Bulan ${monthName} ${y}.xlsx`
+  }
+
+  // 4. Custom range fallback
+  const startD = new Date(options.startDate)
+  const endD = new Date(options.endDate)
+  if (!isNaN(startD.getTime()) && !isNaN(endD.getTime())) {
+    const startM = INDO_MONTHS[startD.getMonth()]
+    const endM = INDO_MONTHS[endD.getMonth()]
+    const startY = startD.getFullYear()
+    const endY = endD.getFullYear()
+
+    if (startY === endY) {
+      if (startM === endM) return `Laporan Nota Bulan ${startM} ${startY}.xlsx`
+      return `Laporan Nota Bulan ${startM} - ${endM} ${startY}.xlsx`
+    }
+    return `Laporan Nota ${startM} ${startY} - ${endM} ${endY}.xlsx`
+  }
+
+  return `Laporan Nota Bulan ${monthName} ${y}.xlsx`
+}
+
+function isFullYearRange(start: string, end: string): boolean {
+  const s = new Date(start)
+  const e = new Date(end)
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return false
+  return s.getMonth() === 0 && s.getDate() === 1 && e.getMonth() === 11 && e.getDate() >= 28
+}
+
+function isWeeklyRange(start: string, end: string): boolean {
+  const s = new Date(start).getTime()
+  const e = new Date(end).getTime()
+  if (isNaN(s) || isNaN(e)) return false
+  const diffDays = Math.round(Math.abs(e - s) / (1000 * 60 * 60 * 24))
+  return diffDays >= 4 && diffDays <= 8
+}
+
+function isSameMonth(start: string, end: string): boolean {
+  const s = new Date(start)
+  const e = new Date(end)
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return false
+  return s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()
+}

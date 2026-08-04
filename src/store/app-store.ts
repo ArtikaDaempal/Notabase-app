@@ -38,7 +38,7 @@ const NAV_TABS: NavTab[] = ['dashboard', 'scan', 'history', 'report', 'settings'
 export const useAppStore = create<AppState>((set, get) => ({
   // Default: workspace-setup agar onboarding muncul pertama kali (BR-WS-01).
   // WorkspaceSetupView akan redirect ke 'splash' → 'dashboard' setelah setup selesai.
-  view: 'workspace-setup',
+  view: 'dashboard',
   activeTab: 'dashboard',
   selectedReceiptId: null,
   pendingOcr: null,

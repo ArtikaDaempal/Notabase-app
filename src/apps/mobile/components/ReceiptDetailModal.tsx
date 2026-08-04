@@ -81,7 +81,7 @@ export function ReceiptDetailModal({
 
   const handleDelete = async () => {
     if (!onDelete) return
-    if (confirm('Hapus nota ini secara permanen dari aplikasi dan database Supabase?')) {
+    if (confirm('Hapus nota ini?')) {
       try {
         await onDelete(receipt.id)
         if (typeof window !== 'undefined') {

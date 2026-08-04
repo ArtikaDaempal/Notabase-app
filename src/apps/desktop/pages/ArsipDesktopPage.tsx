@@ -43,6 +43,8 @@ import {
 import { DEFAULT_WORKSPACE_ID } from '@/lib/constants'
 import type { NavTab } from '@/types'
 
+import { getReportFilename } from '@/lib/utils'
+
 export interface ArsipDesktopPageProps {
   workspaceId?: string
   workspaceName?: string
@@ -115,13 +117,14 @@ export function ArsipDesktopPage({
   }
 
   const handleDelete = (id: string) => {
-    if (confirm('Hapus nota ini secara permanen dari aplikasi dan database Supabase?')) {
+    if (confirm('Hapus nota ini?')) {
       deleteReceipt(id, {
         onSuccess: () => {
           window.dispatchEvent(new CustomEvent('notabase_receipts_changed'))
           window.dispatchEvent(new Event('receipts-updated'))
           window.dispatchEvent(new Event('receipt-deleted'))
-          toast.success('Berhasil terhapus')
+          toast.success('Nota berhasil dihapus')
+          refetch()
         },
         onError: () => toast.error('Gagal menghapus nota'),
       })
@@ -144,7 +147,7 @@ export function ArsipDesktopPage({
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Laporan_Nota_${workspaceCode}_${new Date().toISOString().slice(0, 10)}.xlsx`
+      a.download = getReportFilename({ startDate, endDate })
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

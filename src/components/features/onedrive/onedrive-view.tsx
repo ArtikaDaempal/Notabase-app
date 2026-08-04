@@ -19,6 +19,16 @@ import { useAppStore } from '@/store/app-store'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
 import type { SyncLog } from '@/types'
 
@@ -47,6 +57,9 @@ export function OnedriveView() {
 
   const [state, setState] = useState<SyncState | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showConnectModal, setShowConnectModal] = useState(false)
+  const [inputEmail, setInputEmail] = useState('')
+  const [isConnecting, setIsConnecting] = useState(false)
 
   const fetchState = () => {
     setLoading(true)
@@ -65,13 +78,17 @@ export function OnedriveView() {
 
   const accountEmail = state?.account || ''
 
-  const openFolderWeb = async (folderSubPath: string, directUrl?: string) => {
-    if (directUrl && directUrl.startsWith('http')) {
-      window.open(directUrl, '_blank')
+  const handleOAuthConnect = () => {
+    window.location.href = `/api/sync/auth?redirect=true&workspaceId=${workspaceId}`
+  }
+
+  const handleCustomConnect = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inputEmail.trim()) {
+      toast.error('Masukkan alamat email Microsoft OneDrive')
       return
     }
-
-    const tid = toast.loading(`Membuka folder ${folderSubPath} di OneDrive...`)
+    setIsConnecting(true)
     try {
       const res = await fetch('/api/sync', {
         method: 'POST',
@@ -79,18 +96,75 @@ export function OnedriveView() {
           'Content-Type': 'application/json',
           'x-workspace-id': workspaceId,
         },
-        body: JSON.stringify({ action: 'create_folder', targetFolder: folderSubPath }),
+        body: JSON.stringify({ action: 'connect', email: inputEmail.trim() }),
       })
       const data = await res.json()
-      toast.dismiss(tid)
+      if (res.ok && data.connected) {
+        toast.success(`Berhasil terhubung ke akun ${data.account || inputEmail}`)
+        setShowConnectModal(false)
+        setInputEmail('')
+        fetchState()
+      } else {
+        toast.error(data.error || 'Gagal menghubungkan akun OneDrive')
+      }
+    } catch {
+      toast.error('Gagal menghubungkan akun OneDrive')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
 
-      const targetUrl = data.webUrl || `https://onedrive.live.com/?v=myfiles&path=${encodeURIComponent('/' + folderSubPath)}`
-      window.open(targetUrl, '_blank')
+  const handleDisconnect = async () => {
+    if (!confirm('Apakah Anda yakin ingin memutuskan koneksi akun OneDrive ini?')) return
+    const tid = toast.loading('Memutuskan koneksi OneDrive...')
+    try {
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-workspace-id': workspaceId,
+        },
+        body: JSON.stringify({ action: 'disconnect' }),
+      })
+      if (res.ok) {
+        toast.dismiss(tid)
+        toast.success('Koneksi OneDrive berhasil diputuskan')
+        fetchState()
+      } else {
+        toast.dismiss(tid)
+        toast.error('Gagal memutuskan koneksi')
+      }
     } catch {
       toast.dismiss(tid)
-      const cleanPath = folderSubPath.startsWith('/') ? folderSubPath : `/${folderSubPath}`
-      window.open(`https://onedrive.live.com/?v=myfiles&path=${encodeURIComponent(cleanPath)}`, '_blank')
+      toast.error('Gagal memutuskan koneksi')
     }
+  }
+
+  const openFolderWeb = async (folderSubPath: string) => {
+    let cleanPath = folderSubPath.replace(/^\/+/, '')
+    if (!cleanPath.startsWith('Notabase')) {
+      cleanPath = `Notabase/${cleanPath}`
+    }
+
+    const tid = toast.loading(`Mempersiapkan folder ${cleanPath} di OneDrive...`)
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-workspace-id': workspaceId,
+        },
+        body: JSON.stringify({ action: 'create_folder', targetFolder: cleanPath }),
+      })
+    } catch {
+      // ignore
+    } finally {
+      toast.dismiss(tid)
+    }
+
+    // Open official My Files page (lands directly on My files, where Notabase is located)
+    window.open('https://onedrive.live.com/?v=myfiles', '_blank', 'noopener,noreferrer')
   }
 
   // Real data calculations
@@ -124,10 +198,10 @@ export function OnedriveView() {
     : 'Belum ada file tersimpan'
 
   // Calculate actual total bytes from uploaded logs if state cloudUsed is 0
-  const realCalculatedBytes = logs.reduce((acc, l) => acc + (l.fileSize || 2450000), 0)
+  const realCalculatedBytes = logs.reduce((acc, l) => acc + (l.fileSize || 0), 0)
   const cloudUsed = state?.cloudUsed && state.cloudUsed > 0 ? state.cloudUsed : realCalculatedBytes
   const cloudTotal = state?.cloudTotal || 5 * 1024 * 1024 * 1024
-  const usedPct = state?.usedPct && state.usedPct > 0 ? state.usedPct : (cloudUsed / cloudTotal) * 100
+  const usedPct = state?.usedPct && state.usedPct > 0 ? state.usedPct : (cloudTotal > 0 ? (cloudUsed / cloudTotal) * 100 : 0)
 
   return (
     <div className="min-h-screen bg-[#F8FAFF] dark:bg-slate-950 pb-28 text-slate-900 dark:text-slate-100 text-left font-sans">
@@ -197,31 +271,62 @@ export function OnedriveView() {
 
             {/* Account Info Box */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-slate-50/90 dark:bg-slate-950/80 border border-slate-100 dark:border-slate-800 p-4 text-left">
-              <div className="flex flex-row items-center gap-3 text-left">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
-                  <Check className="h-5 w-5 stroke-[2.5]" />
+              <div className="flex flex-row items-center gap-3 text-left min-w-0 flex-1">
+                <div className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                  state?.connected !== false
+                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
+                )}>
+                  {state?.connected !== false ? <Check className="h-5 w-5 stroke-[2.5]" /> : <Cloud className="h-5 w-5" />}
                 </div>
-                <div className="space-y-0.5 min-w-0 text-left">
+                <div className="space-y-0.5 min-w-0 text-left flex-1">
                   <p className="text-xs font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wider text-left">
-                    TERHUBUNG KE ONEDRIVE
+                    {state?.connected !== false ? 'TERHUBUNG KE ONEDRIVE' : 'BELUM TERHUBUNG'}
                   </p>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate text-left">
-                    {accountEmail}
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate text-left font-mono">
+                    {state?.connected !== false ? accountEmail || 'Akun Microsoft Terhubung' : 'Tidak ada akun terhubung'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100/90 dark:bg-emerald-950/90 px-3 py-1 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
-                  ✓ TERHUBUNG (ONEDRIVE)
-                </span>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => setShowConnectModal(true)}
+                  className="rounded-xl h-9 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs gap-1.5"
+                >
+                  <Cloud className="h-3.5 w-3.5" />
+                  <span>{state?.connected !== false ? 'Ganti Akun' : 'Hubungkan Akun'}</span>
+                </Button>
+
+                {state?.connected !== false && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDisconnect}
+                    className="rounded-xl h-9 border-red-200 dark:border-red-900/60 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs font-bold gap-1.5"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    <span>Putuskan</span>
+                  </Button>
+                )}
               </div>
             </div>
 
             {/* Bottom Status Ribbon */}
-            <div className="flex flex-row items-center justify-center gap-2 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-100/70 dark:border-emerald-900/40 py-2.5 px-4 text-xs font-semibold text-emerald-700 dark:text-emerald-300 text-center">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <span>Data Anda aman dan akan tersinkronisasi secara otomatis</span>
+            <div className={cn(
+              'flex flex-row items-center justify-center gap-2 rounded-2xl border py-2.5 px-4 text-xs font-semibold text-center',
+              state?.connected !== false
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-100/70 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                : 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-100/70 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
+            )}>
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <span>
+                {state?.connected !== false
+                  ? 'Data Anda aman dan akan tersinkronisasi secara otomatis ke OneDrive'
+                  : 'Hubungkan akun Microsoft OneDrive Anda untuk mengaktifkan sinkronisasi cloud'}
+              </span>
             </div>
           </div>
         </motion.div>
@@ -433,6 +538,86 @@ export function OnedriveView() {
         </div>
 
       </main>
+
+      {/* Dialog Modal: Hubungkan / Ganti Akun OneDrive */}
+      <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>
+        <DialogContent className="sm:max-w-md rounded-3xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
+          <DialogHeader className="space-y-1">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50 mb-1">
+              <Cloud className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+              Hubungkan Akun OneDrive
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+              Pilih metode otorisasi untuk menghubungkan akun Microsoft OneDrive (Pribadi, Komdigi, atau Kerja/Sekolah).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            {/* Option 1 (Primary & Recommended): Input Email Akun Microsoft */}
+            <form onSubmit={handleCustomConnect} className="rounded-2xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/40 p-4 space-y-3">
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Hubungkan Akun Microsoft (Langsung &amp; Instan)
+                </h4>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                  Masukkan email akun Microsoft yang ingin dihubungkan (contoh: <span className="font-mono text-emerald-700 dark:text-emerald-300">sunflower@gmail.com</span> atau <span className="font-mono text-emerald-700 dark:text-emerald-300">user@kominfo.go.id</span>).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Input
+                  type="email"
+                  required
+                  placeholder="Masukkan email Microsoft..."
+                  value={inputEmail}
+                  onChange={(e) => setInputEmail(e.target.value)}
+                  className="rounded-xl h-10 text-xs border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isConnecting}
+                className="w-full rounded-xl h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+              >
+                {isConnecting ? 'Menghubungkan Akun...' : 'Simpan & Hubungkan Akun Ini'}
+              </Button>
+            </form>
+
+            {/* Separator OR */}
+            <div className="relative flex items-center justify-center">
+              <div className="border-t border-slate-200 dark:border-slate-800 w-full" />
+              <span className="bg-white dark:bg-slate-900 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest absolute">
+                atau via Otorisasi OAuth
+              </span>
+            </div>
+
+            {/* Option 2: Microsoft OAuth Login */}
+            <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 p-3.5 space-y-2">
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Login Otorisasi Microsoft OAuth 2.0
+                </h4>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Masuk via portal login Single Sign-On Microsoft (memerlukan pendaftaran Redirect URI di Azure Portal).
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleOAuthConnect}
+                className="w-full rounded-xl h-9 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs gap-2 cursor-pointer"
+              >
+                <Cloud className="h-4 w-4 text-blue-600" />
+                <span>Otorisasi via Microsoft OAuth</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

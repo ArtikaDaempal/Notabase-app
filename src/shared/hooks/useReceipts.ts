@@ -185,9 +185,12 @@ export function useDeleteReceipt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] })
+      queryClient.refetchQueries({ queryKey: ['receipts'] })
       queryClient.invalidateQueries({ queryKey: ['syncQueue'] })
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('notabase_receipts_changed'))
+        window.dispatchEvent(new Event('receipts-updated'))
+        window.dispatchEvent(new Event('receipt-deleted'))
       }
     },
   })

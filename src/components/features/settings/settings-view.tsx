@@ -42,13 +42,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { lockDevice, getDeviceName } from '@/shared/services/deviceGate'
+import { MASTER_INVITE_CODE } from '@/shared/config/inviteCode'
+import { KeyRound, Lock, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-type Section = 'general' | 'camera' | 'ocr' | 'export' | 'onedrive'
+type Section = 'general' | 'security' | 'camera' | 'ocr' | 'export' | 'onedrive'
 
 const sections: { id: Section; label: string; mobileLabel: string; icon: any }[] = [
   { id: 'general',  label: 'Umum',           mobileLabel: 'Umum',     icon: Settings },
+  { id: 'security', label: 'Keamanan',       mobileLabel: 'Akses',    icon: ShieldCheck },
   { id: 'camera',   label: 'Kamera',          mobileLabel: 'Kamera',   icon: Camera },
   { id: 'ocr',      label: 'OCR & Bahasa',    mobileLabel: 'OCR',      icon: Languages },
   { id: 'export',   label: 'Ekspor & Format', mobileLabel: 'Ekspor',   icon: FileSpreadsheet },
@@ -264,6 +268,91 @@ export function SettingsView() {
         </Card>
       )}
 
+      {/* KEAMANAN WORKSPACE */}
+      {active === 'security' && (
+        <Card className="rounded-3xl border border-slate-100/80 dark:border-slate-800 p-5 shadow-2xs bg-white dark:bg-slate-900 space-y-5">
+          <div className="flex items-center gap-3.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100/70 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">Keamanan Workspace</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Kelola gerbang aktivasi dan kunci akses perangkat.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* Workspace & Device Info */}
+            <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Status Perangkat Ini</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Aktif & Terdaftar
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Nama: <span className="font-bold text-slate-900 dark:text-slate-100">{getDeviceName()}</span>
+              </p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Workspace: <span className="font-semibold text-blue-600 dark:text-blue-400">{SINGLE_TENANT_WORKSPACE.name}</span> ({SINGLE_TENANT_WORKSPACE.code})
+              </p>
+            </div>
+
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
+
+            {/* Master Invite Code display */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <KeyRound className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                Kode Undangan Aktivasi Master
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={MASTER_INVITE_CODE}
+                  className="rounded-2xl text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-mono font-bold text-blue-600 dark:text-blue-400 h-10 tracking-wider"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(MASTER_INVITE_CODE)
+                    toast.success('Kode undangan berhasil disalin ke clipboard!')
+                  }}
+                  className="rounded-2xl shrink-0 border-slate-200 dark:border-slate-700 text-xs font-bold h-10 px-3 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Copy className="h-4 w-4 text-slate-500" />
+                  <span>Salin</span>
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Gunakan kode ini untuk mengaktivasi perangkat pengguna/admin baru di instansi Anda.
+              </p>
+            </div>
+
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
+
+            {/* Lock Device Action */}
+            <div className="pt-1">
+              <Button
+                onClick={() => {
+                  lockDevice()
+                  toast.info('Workspace dikunci. Mengalihkan ke layar aktivasi...')
+                  setTimeout(() => {
+                    window.location.reload()
+                  }, 500)
+                }}
+                variant="outline"
+                className="w-full rounded-2xl h-11 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Lock className="h-4 w-4" />
+                <span>Kunci Workspace Perangkat Ini</span>
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* 2. KAMERA */}
       {active === 'camera' && (
         <Card className="rounded-3xl border border-slate-100/80 dark:border-slate-800 p-5 shadow-2xs bg-white dark:bg-slate-900 space-y-5">
@@ -426,29 +515,42 @@ export function SettingsView() {
             </div>
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">OneDrive</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Status sinkronisasi akun cloud Microsoft OneDrive.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Status sinkronisasi dan otorisasi akun cloud Microsoft OneDrive.</p>
             </div>
           </div>
 
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Akun Terhubung</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Akun Microsoft OneDrive</span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Aktif
+                  Terhubung
                 </span>
               </div>
-              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono">{onedriveAccount}</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono">{onedriveAccount || 'Akun Terhubung'}</p>
             </div>
 
-            <Button
-              onClick={() => navigate('onedrive')}
-              className="w-full rounded-2xl h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer"
-            >
-              <Cloud className="h-4.5 w-4.5" />
-              <span>Buka Menu Backup & Sinkronisasi OneDrive</span>
-            </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Button
+                onClick={() => navigate('onedrive')}
+                className="w-full rounded-2xl h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                <Cloud className="h-4.5 w-4.5" />
+                <span>Menu Sinkronisasi OneDrive</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.location.href = `/api/sync/auth?redirect=true&workspaceId=${SINGLE_TENANT_WORKSPACE.id}`
+                }}
+                className="w-full rounded-2xl h-11 border-slate-200 dark:border-slate-700 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+              >
+                <Cloud className="h-4.5 w-4.5 text-blue-600" />
+                <span>Otorisasi / Ganti Akun OAuth</span>
+              </Button>
+            </div>
           </div>
         </Card>
       )}

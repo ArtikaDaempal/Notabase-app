@@ -22,6 +22,8 @@ import { SettingsView } from '@/components/features/settings/settings-view'
 import { SearchView } from '@/components/features/search/search-view'
 import { GalleryView } from '@/components/features/gallery/gallery-view'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
+import { isDeviceUnlocked } from '@/shared/services/deviceGate'
+import { InviteGate } from '@/packages/ui-shared/InviteGate'
 import { NetworkStatusBar } from '@/components/ui/network-status-bar'
 import type { NavTab } from '@/types'
 
@@ -40,6 +42,11 @@ export default function Home() {
 
   const isDesktop = useIsDesktop(768)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isUnlocked, setIsUnlocked] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    setIsUnlocked(isDeviceUnlocked())
+  }, [])
 
   // Redirect workspace-setup view straight to dashboard
   useEffect(() => {
@@ -56,6 +63,20 @@ export default function Home() {
       })
       .catch((err) => console.error('Failed to load initial settings:', err))
   }, [setLanguage])
+
+  // If gate status is not loaded yet (SSR hydration)
+  if (isUnlocked === null) {
+    return (
+      <div className="min-h-screen bg-[#F4F7FC] dark:bg-slate-950 flex items-center justify-center">
+        <NetworkStatusBar />
+      </div>
+    )
+  }
+
+  // Render Invite Gate if device/workspace is not unlocked
+  if (!isUnlocked) {
+    return <InviteGate onSuccess={() => setIsUnlocked(true)} />
+  }
 
   if (view === 'splash') {
     return (

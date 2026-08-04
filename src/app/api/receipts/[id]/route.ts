@@ -167,8 +167,17 @@ export async function DELETE(
   const client = getWorkspaceDb(workspaceId)
 
   try {
-    await client.from('receipt_items').delete().eq('receipt_id', id)
-    await client.from('receipts').delete().eq('id', id)
+    // Delete receipt_items matching receipt_id or receipt_number
+    await client.from('receipt_items').delete().or(`receipt_id.eq.${id}`)
+    
+    // Mark as deleted & delete row by id and receipt_number
+    if (isUuid162(id)) {
+      await client.from('receipts').update({ is_deleted: true, deleted_at: new Date().toISOString() } as any).eq('id', id)
+      await client.from('receipts').delete().eq('id', id)
+    } else {
+      await client.from('receipts').update({ is_deleted: true, deleted_at: new Date().toISOString() } as any).or(`id.eq.${id},receipt_number.eq.${id}`)
+      await client.from('receipts').delete().or(`id.eq.${id},receipt_number.eq.${id}`)
+    }
   } catch (delErr) {
     console.warn(`[API /api/receipts/${id} DELETE] Supabase delete warning:`, delErr)
   }

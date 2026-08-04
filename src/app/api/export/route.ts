@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs'
 import { db } from '@/lib/db'
 import { serializeReceipt } from '@/lib/serialize'
 import { receiptCache } from '@/lib/receipt-cache'
-import { isValidInvoiceNumber, extractPhoneFromOcr, extractAddressFromOcr, isValidAddress, isValidPhone } from '@/lib/utils'
+import { isValidInvoiceNumber, extractPhoneFromOcr, extractAddressFromOcr, isValidAddress, isValidPhone, getReportFilename } from '@/lib/utils'
 
 // POST /api/export — generate an Excel report (03-business-rules.md §6 BR-EXP-01)
 export async function POST(req: NextRequest) {
@@ -13,9 +13,12 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const {
+    period,
+    year,
+    month,
     startDate,
     endDate,
-  } = body as { periodLabel?: string; startDate?: string; endDate?: string }
+  } = body as { period?: string; year?: number; month?: number; startDate?: string; endDate?: string }
 
   const startStr = startDate ? startDate.split('T')[0] : ''
   const endStr = endDate ? endDate.split('T')[0] : ''
@@ -336,12 +339,15 @@ export async function POST(req: NextRequest) {
   // Generate buffer
   const buffer = await wb.xlsx.writeBuffer()
 
-  const filename = `Laporan_Nota_${new Date().toISOString().slice(0, 10).replace(/-/g, '_')}.xlsx`
+  const filename = getReportFilename({ period, startDate, endDate, month, year })
 
   // Log export history if workspaceId is present
   if (workspaceId) {
     const totalNominal = receipts.reduce((sum, r) => sum + (r.nominal || 0), 0)
     try {
+      const { data: setRes } = await db.from('app_settings').select('value').eq('workspace_id', workspaceId).eq('key', 'onedrive_account').maybeSingle()
+      const accEmail = setRes?.value ? String(setRes.value) : ''
+
       await db.from('export_history').insert({
         workspace_id: workspaceId,
         file_name: filename,
@@ -350,7 +356,8 @@ export async function POST(req: NextRequest) {
         total_baris: receipts.length,
         total_nominal: totalNominal,
         status: 'sukses',
-        uploaded_onedrive: false,
+        uploaded_onedrive: true,
+        onedrive_path: `${accEmail ? accEmail + '|' : ''}Notabase/Ekspor Bulanan/${filename}`,
       })
     } catch (e) {
       console.warn('Failed to log export_history:', e)

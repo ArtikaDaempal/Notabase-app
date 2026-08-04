@@ -18,61 +18,6 @@ import { formatRupiah, cn } from '@/lib/utils'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
 import { getDeviceName } from '@/shared/services/deviceGate'
 
-const DUMMY_CHART_DATA = [
-  { name: '27 Jun', value: 950000 },
-  { name: '1 Jul', value: 1200000 },
-  { name: '5 Jul', value: 1050000 },
-  { name: '9 Jul', value: 1100000 },
-  { name: '13 Jul', value: 4100000 },
-  { name: '17 Jul', value: 2300000 },
-  { name: '21 Jul', value: 1150000 },
-  { name: '25 Jul', value: 1200000 },
-  { name: '27 Jul', value: 1350000 },
-]
-
-const DUMMY_RECENT_RECEIPTS = [
-  {
-    id: 'd1',
-    namaToko: 'Creative Cafe Manado',
-    kategori: 'Makanan & Minuman',
-    badgeColor: 'bg-blue-50 text-blue-600 border-blue-100',
-    tanggal: '27 Jul 2025',
-    nominal: 128500,
-  },
-  {
-    id: 'd2',
-    namaToko: 'Toko Sinar Jaya',
-    kategori: 'Belanja',
-    badgeColor: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-    tanggal: '27 Jul 2025',
-    nominal: 89900,
-  },
-  {
-    id: 'd3',
-    namaToko: 'Indomaret Bahu',
-    kategori: 'Kebutuhan Harian',
-    badgeColor: 'bg-purple-50 text-purple-600 border-purple-100',
-    tanggal: '26 Jul 2025',
-    nominal: 67450,
-  },
-  {
-    id: 'd4',
-    namaToko: 'Toko Buku Gramedia',
-    kategori: 'Pendidikan',
-    badgeColor: 'bg-amber-50 text-amber-600 border-amber-100',
-    tanggal: '26 Jul 2025',
-    nominal: 125000,
-  },
-  {
-    id: 'd5',
-    namaToko: 'Warung Kopi Kita',
-    kategori: 'Makanan & Minuman',
-    badgeColor: 'bg-blue-50 text-blue-600 border-blue-100',
-    tanggal: '25 Jul 2025',
-    nominal: 42500,
-  },
-]
-
 export function DashboardView() {
   const { openReceipt, setTab } = useAppStore()
   const workspaceId = SINGLE_TENANT_WORKSPACE.id
@@ -80,7 +25,7 @@ export function DashboardView() {
   const [userName, setUserName] = useState('Notabase')
   const [loading, setLoading] = useState(true)
   const [statsData, setStatsData] = useState<any>(null)
-  const [recentReceipts, setRecentReceipts] = useState(DUMMY_RECENT_RECEIPTS)
+  const [recentReceipts, setRecentReceipts] = useState<any[]>([])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -106,36 +51,36 @@ export function DashboardView() {
         }
       } catch {}
 
-      if (d && d.allTime && d.allTime.count > 0) {
+      if (d && d.allTime) {
         setStatsData(d)
         if (d.recent && d.recent.length > 0) {
           setRecentReceipts(
-            d.recent.slice(0, 5).map((r: any, idx: number) => ({
+            d.recent.slice(0, 5).map((r: any) => ({
               id: r.id,
               namaToko: r.namaToko || r.merchantName || 'Lainnya',
-              kategori: r.kategori || DUMMY_RECENT_RECEIPTS[idx % 5].kategori,
-              badgeColor: DUMMY_RECENT_RECEIPTS[idx % 5].badgeColor,
+              kategori: r.kategori || 'Nota',
               tanggal: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(
                 new Date(r.tanggal || r.transactionDate || Date.now())
               ),
               nominal: r.nominal ?? r.total ?? 0,
             }))
           )
+        } else {
+          setRecentReceipts([])
         }
       } else if (localItems.length > 0) {
         const sumArr = (arr: any[]) => arr.reduce((a, b) => a + (Number(b.nominal) || 0), 0)
         setStatsData({
-          todayCount: localItems.length,
-          todayTotal: sumArr(localItems),
-          allTimeCount: localItems.length,
-          allTimeTotal: sumArr(localItems),
+          today: { count: localItems.length, total: sumArr(localItems), subtext: '' },
+          week: { count: localItems.length, total: sumArr(localItems), subtext: '' },
+          month: { count: localItems.length, total: sumArr(localItems), subtext: '' },
+          allTime: { count: localItems.length, total: sumArr(localItems) },
         })
         setRecentReceipts(
-          localItems.slice(0, 5).map((r: any, idx: number) => ({
+          localItems.slice(0, 5).map((r: any) => ({
             id: r.id,
             namaToko: r.namaToko || 'Lainnya',
-            kategori: r.kategori || DUMMY_RECENT_RECEIPTS[idx % 5].kategori,
-            badgeColor: DUMMY_RECENT_RECEIPTS[idx % 5].badgeColor,
+            kategori: r.kategori || 'Nota',
             tanggal: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(
               new Date(r.tanggal || r.createdAt || Date.now())
             ),
@@ -143,7 +88,8 @@ export function DashboardView() {
           }))
         )
       } else {
-        setStatsData(d)
+        setStatsData(d || null)
+        setRecentReceipts([])
       }
     } catch {
       // ignore
@@ -166,8 +112,8 @@ export function DashboardView() {
   const statCards = [
     {
       title: 'Nota Hari Ini',
-      count: statsData?.today?.count ?? statsData?.todayCount ?? 12,
-      subtext: '+20%',
+      count: statsData?.today?.count ?? 0,
+      subtext: statsData?.today?.subtext || '',
       subLabel: 'dari kemarin',
       iconSvg: (
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -179,8 +125,8 @@ export function DashboardView() {
     },
     {
       title: 'Nota Minggu Ini',
-      count: statsData?.week?.count ?? 48,
-      subtext: '+15%',
+      count: statsData?.week?.count ?? 0,
+      subtext: statsData?.week?.subtext || '',
       subLabel: 'dari minggu lalu',
       iconSvg: (
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
@@ -192,8 +138,8 @@ export function DashboardView() {
     },
     {
       title: 'Nota Bulan Ini',
-      count: statsData?.month?.count ?? 156,
-      subtext: '+10%',
+      count: statsData?.month?.count ?? 0,
+      subtext: statsData?.month?.subtext || '',
       subLabel: 'dari bulan lalu',
       iconSvg: (
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
@@ -205,7 +151,7 @@ export function DashboardView() {
     },
     {
       title: 'Total Nota',
-      count: statsData?.allTime?.count ?? statsData?.allTimeCount ?? 1256,
+      count: statsData?.allTime?.count ?? 0,
       subtext: '',
       subLabel: 'Semua waktu',
       iconSvg: (
@@ -218,9 +164,10 @@ export function DashboardView() {
     },
   ]
 
-  const formattedChartTotal = statsData?.allTime?.total
-    ? formatRupiah(statsData.allTime.total)
-    : 'Rp 1.760.432'
+  const formattedChartTotal = formatRupiah(statsData?.allTime?.total || 0)
+  const realChartData = (statsData?.chart && statsData.chart.length > 0)
+    ? statsData.chart
+    : [{ name: 'Hari ini', value: 0 }]
 
   return (
     <div className="w-full space-y-5 pb-16">
@@ -299,9 +246,6 @@ export function DashboardView() {
               <span className="block text-lg sm:text-xl font-extrabold text-blue-600 dark:text-blue-400">
                 {formattedChartTotal}
               </span>
-              <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                Total Pendapatan
-              </span>
             </div>
           </div>
 
@@ -310,7 +254,7 @@ export function DashboardView() {
               <Skeleton className="h-full w-full rounded-2xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={DUMMY_CHART_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={realChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="blueSmoothGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />

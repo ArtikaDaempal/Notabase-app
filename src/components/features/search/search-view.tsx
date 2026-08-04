@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { formatRupiah, formatDateShort, cn } from '@/lib/utils'
+import { formatRupiah, formatDateShort, cn, getReportFilename } from '@/lib/utils'
 import type { Receipt } from '@/types'
 
 interface ReceiptListResponse {
@@ -96,14 +96,16 @@ export function SearchView() {
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format }),
+        body: JSON.stringify({ format, startDate: dateFrom, endDate: dateTo }),
       })
       if (!res.ok) throw new Error()
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Hasil_Filter_${new Date().toISOString().slice(0, 10)}.${format === 'excel' ? 'xlsx' : 'pdf'}`
+      a.download = format === 'excel'
+        ? getReportFilename({ startDate: dateFrom, endDate: dateTo })
+        : `Laporan Nota.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

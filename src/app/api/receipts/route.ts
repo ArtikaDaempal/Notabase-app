@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const receiptType = searchParams.get('receiptType') || ''
   const kategori = searchParams.get('kategori') || ''
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
-  const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.get('pageSize') || '12', 10)))
+  const pageSize = Math.max(1, Math.min(10000, parseInt(searchParams.get('pageSize') || '12', 10)))
 
   const client = getWorkspaceDb(workspaceId)
   let dbRows: any[] = []
@@ -109,14 +109,8 @@ export async function GET(req: NextRequest) {
   const cachedReceipts = receiptCache.getAllReceipts(workspaceId)
   const existingIds = new Set(mappedDbRows.map((r: any) => r.id))
 
-  // If Supabase query returned valid data, any cached receipt that is synced but missing from Supabase was deleted on Supabase!
   const cacheFiltered = cachedReceipts.filter((r) => {
     if (existingIds.has(r.id)) return false
-
-    if (dbRows.length > 0 && (r.synced || !r.pendingSync)) {
-      receiptCache.deleteReceipt(r.id)
-      return false
-    }
 
     // Search query filter (q)
     if (q && !r.merchantName?.toLowerCase().includes(q) && !r.namaToko?.toLowerCase().includes(q) && !r.invoiceNumber?.toLowerCase().includes(q) && !r.receiptNumber?.toLowerCase().includes(q) && !r.keterangan?.toLowerCase().includes(q)) {
@@ -133,8 +127,6 @@ export async function GET(req: NextRequest) {
       return false
     }
 
-
-
     // Amount range filter
     const amount = Number(r.nominal ?? r.total ?? 0)
     if (minAmount && amount < parseFloat(minAmount)) return false
@@ -144,7 +136,18 @@ export async function GET(req: NextRequest) {
     if (hasImage && !r.imageUrl) return false
 
     // Date range filter (startDate & endDate)
-    const rDateStr = (r.tanggal || r.transactionDate || '').split('T')[0]
+    const rawDate = r.tanggal || r.transactionDate || ''
+    let rDateStr = rawDate.split('T')[0]
+    if (rawDate.includes('/')) {
+      const parts = rawDate.split('/')
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0')
+        const month = parts[1].padStart(2, '0')
+        const year = parts[2]
+        rDateStr = `${year}-${month}-${day}`
+      }
+    }
+
     if (startDate) {
       const startStr = startDate.split('T')[0]
       if (rDateStr && rDateStr < startStr) return false
@@ -328,8 +331,15 @@ export async function DELETE(req: NextRequest) {
       // 2. Hapus langsung dari Supabase
       try {
         const client = getWorkspaceDb(workspaceId)
-        await client.from('receipt_items').delete().eq('receipt_id', id)
-        await client.from('receipts').delete().eq('id', id)
+        await client.from('receipt_items').delete().or(`receipt_id.eq.${id}`)
+
+        if (isUuid(id)) {
+          await client.from('receipts').update({ is_deleted: true, deleted_at: new Date().toISOString() } as any).eq('id', id)
+          await client.from('receipts').delete().eq('id', id)
+        } else {
+          await client.from('receipts').update({ is_deleted: true, deleted_at: new Date().toISOString() } as any).or(`id.eq.${id},receipt_number.eq.${id}`)
+          await client.from('receipts').delete().or(`id.eq.${id},receipt_number.eq.${id}`)
+        }
       } catch (err) {
         console.warn('[API /api/receipts DELETE] Supabase delete warning:', err)
       }

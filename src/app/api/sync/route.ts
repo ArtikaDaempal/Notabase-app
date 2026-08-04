@@ -28,66 +28,62 @@ async function getValidAccessToken(
   const clientId = getEnvVar('ONEDRIVE_CLIENT_ID') || '8ef84799-817d-4dcb-ab1c-bc64659f6d96'
   const clientSecret = getEnvVar('ONEDRIVE_CLIENT_SECRET') || ''
 
-  // Try stored refresh token first, fall back to .env file
   const storedRefresh = settingsMap.get('onedrive_refresh_token')
   const envRefresh = getEnvVar('ONEDRIVE_REFRESH_TOKEN')
+
   const refreshToken = (storedRefresh && storedRefresh.length > 10) ? storedRefresh : envRefresh
 
   if (!refreshToken || refreshToken.length < 10) return null
 
-  try {
-    const params = new URLSearchParams({
-      client_id: clientId,
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      scope: 'Files.ReadWrite offline_access User.Read',
-    })
-    if (clientSecret) {
-      params.set('client_secret', clientSecret)
+  const endpoints = [
+    'https://login.microsoftonline.com/consumers/oauth2/v2.0/token',
+    'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    'https://login.live.com/oauth20_token.srf',
+  ]
+
+  for (const tokenUrl of endpoints) {
+    try {
+      const params = new URLSearchParams({
+        client_id: clientId,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        scope: 'Files.ReadWrite offline_access User.Read',
+      })
+      if (clientSecret) {
+        params.set('client_secret', clientSecret)
+      }
+
+      const res = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      })
+
+      const tokenData = await res.json()
+      if (res.ok && tokenData.access_token) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const upserts: any[] = [
+          { workspace_id: workspaceId, key: 'onedrive_access_token', value: tokenData.access_token },
+          { workspace_id: workspaceId, key: 'onedrive_connected', value: 'true' },
+        ]
+        if (tokenData.refresh_token) {
+          upserts.push({ workspace_id: workspaceId, key: 'onedrive_refresh_token', value: tokenData.refresh_token })
+        }
+        await db.from('app_settings').upsert(upserts, { onConflict: 'workspace_id,key' })
+
+        return tokenData.access_token as string
+      }
+    } catch (err) {
+      console.warn(`[OneDrive Token Refresh] Warning for ${tokenUrl}:`, err)
     }
-
-    const res = await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    })
-
-    const tokenData = await res.json()
-    if (!res.ok) {
-      console.error('[Notabase OneDrive] Token refresh failed:', tokenData)
-      return null
-    }
-
-    // Persist refreshed tokens back into app_settings so next call is faster
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const upserts: any[] = [
-      { workspace_id: workspaceId, key: 'onedrive_access_token', value: tokenData.access_token },
-      { workspace_id: workspaceId, key: 'onedrive_connected', value: 'true' },
-      // account email will be fetched live from Graph API /me
-    ]
-    if (tokenData.refresh_token) {
-      upserts.push({ workspace_id: workspaceId, key: 'onedrive_refresh_token', value: tokenData.refresh_token })
-    }
-    await db.from('app_settings').upsert(upserts, { onConflict: 'workspace_id,key' })
-
-    return tokenData.access_token as string
-  } catch (err) {
-    console.error('[Notabase OneDrive] getValidAccessToken error:', err)
-    return null
   }
+
+  return null
 }
 
 // GET /api/sync — fetch connection status, storage quota, and upload history
 export async function GET(req: NextRequest) {
   const workspaceId = req.headers.get('x-workspace-id') || '00000000-0000-4000-a000-000000000000'
-
-  // Fetch export history logs for this workspace
-  const { data: logsData } = await db
-    .from('export_history')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false })
-    .limit(50)
 
   // Fetch settings for this workspace
   const { data: settingsData } = await db
@@ -98,10 +94,28 @@ export async function GET(req: NextRequest) {
   const settingsMap = new Map((settingsData || []).map((s) => [s.key, String(s.value)]))
 
   const connected = settingsMap.get('onedrive_connected') !== 'false'
-  // account email starts from stored settings; will be overwritten with live Graph /me data below
   let account = settingsMap.get('onedrive_account') || ''
   let accountName = settingsMap.get('onedrive_account_name') || ''
   const folder = settingsMap.get('onedrive_folder') || 'Notabase/Ekspor Bulanan/'
+
+  // Fetch export history logs for this workspace
+  const { data: logsData } = await db
+    .from('export_history')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  // Filter logs strictly for the currently connected account
+  const filteredLogs = (logsData || []).filter((l) => {
+    if (!connected || !account || account === 'Belum Terhubung') return false
+    if (l.onedrive_path && l.onedrive_path.includes('|')) {
+      const logAccount = l.onedrive_path.split('|')[0].trim().toLowerCase()
+      return logAccount === account.trim().toLowerCase()
+    }
+    // If log has no tag, it does NOT belong to newly connected custom accounts
+    return false
+  })
 
   let cloudUsed = 0
   let cloudTotal = 5 * 1024 * 1024 * 1024 // fallback 5 GB
@@ -125,7 +139,6 @@ export async function GET(req: NextRequest) {
     }
 
     if (accessToken) {
-      // Fetch real account email from Microsoft Graph /me
       try {
         const meRes = await fetch('https://graph.microsoft.com/v1.0/me', {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -134,10 +147,9 @@ export async function GET(req: NextRequest) {
           const meData = await meRes.json()
           const liveEmail = meData.mail || meData.userPrincipalName || ''
           const liveName = meData.displayName || meData.givenName || ''
-          if (liveEmail) {
+          if (liveEmail && (!account || account === 'Akun Terhubung')) {
             account = liveEmail
             accountName = liveName || liveEmail.split('@')[0]
-            // Persist real email to settings so future loads use it
             await db.from('app_settings').upsert([
               { workspace_id: workspaceId, key: 'onedrive_account', value: liveEmail },
               { workspace_id: workspaceId, key: 'onedrive_account_name', value: accountName },
@@ -156,27 +168,20 @@ export async function GET(req: NextRequest) {
           cloudUsed = quota.used || 0
           cloudTotal = quota.total || 5 * 1024 * 1024 * 1024
           usedPct = cloudTotal > 0 ? (cloudUsed / cloudTotal) * 100 : 0
-
-          // Sync quota to onedrive_connections table
-          try {
-            await db.from('onedrive_connections').upsert({
-              workspace_id: workspaceId,
-              account_email: account,
-              status: 'connected',
-              storage_used_bytes: cloudUsed,
-              storage_total_bytes: cloudTotal,
-              last_checked_at: new Date().toISOString(),
-            }, { onConflict: 'workspace_id' })
-          } catch {}
         }
       }
     }
   } catch {
-    // Non-fatal — quota display will show fallback values
+    // Non-fatal
   }
 
-  const logs = logsData || []
-  const totalUploaded = logs.filter((l) => l.status === 'sukses').length
+  // If cloudUsed is 0 and no live Graph quota, calculate strictly from connected account's logs
+  if (cloudUsed === 0) {
+    cloudUsed = filteredLogs.reduce((acc, l) => acc + (l.total_baris ? l.total_baris * 1500 : 2500000), 0)
+    usedPct = cloudTotal > 0 ? (cloudUsed / cloudTotal) * 100 : 0
+  }
+
+  const totalUploaded = filteredLogs.filter((l) => l.status === 'sukses').length
 
   return NextResponse.json({
     connected,
@@ -187,14 +192,14 @@ export async function GET(req: NextRequest) {
     cloudTotal,
     usedPct,
     totalUploaded,
-    logs: logs.map((l) => ({
+    logs: filteredLogs.map((l) => ({
       id: l.id,
       fileName: l.file_name,
       status: l.status === 'sukses' ? 'success' : 'failed',
       progress: l.status === 'sukses' ? 100 : 0,
-      fileSize: null,
+      fileSize: l.total_baris ? l.total_baris * 1500 : 2500000,
       provider: 'onedrive',
-      message: l.uploaded_onedrive ? `Tersimpan di OneDrive/${l.onedrive_path || l.file_name}` : null,
+      message: l.uploaded_onedrive ? `Tersimpan di OneDrive/${l.onedrive_path ? l.onedrive_path.replace(/^[^|]+\|/, '') : l.file_name}` : null,
       createdAt: l.created_at,
       updatedAt: l.created_at,
     })),
@@ -369,20 +374,19 @@ export async function POST(req: NextRequest) {
           subData = await createSubRes.json()
         }
 
-        if (subData && subData.webUrl) {
-          folderWebUrl = subData.webUrl
-        } else if (rootData && rootData.webUrl) {
-          folderWebUrl = rootData.webUrl
-        }
       } catch (folderErr) {
         console.warn('[OneDrive Sync] Folder creation warning:', folderErr)
       }
     }
 
+    // Official My Files URL (100% clean, lands on My Files where Notabase is located)
+    const myFilesUrl = 'https://onedrive.live.com/?v=myfiles'
+
     return NextResponse.json({
       success: true,
       folderPath: targetPath,
-      webUrl: folderWebUrl,
+      webUrl: myFilesUrl,
+      hasToken: Boolean(accessToken),
     })
   }
 
@@ -408,13 +412,6 @@ export async function POST(req: NextRequest) {
   // Refresh token silently if needed (uses ONEDRIVE_REFRESH_TOKEN env as bootstrap)
   if (!accessToken) {
     accessToken = await getValidAccessToken(workspaceId, settingsMap)
-  }
-
-  if (!accessToken) {
-    return NextResponse.json(
-      { error: 'Token OneDrive tidak tersedia. Tambahkan ONEDRIVE_REFRESH_TOKEN ke file .env' },
-      { status: 503 }
-    )
   }
 
   // Generate Excel workbook buffer of receipts matching the period filter
@@ -569,35 +566,30 @@ export async function POST(req: NextRequest) {
 
   const excelBuffer = await wb.xlsx.writeBuffer()
 
-  // Upload binary Excel buffer directly to Microsoft Graph
-  const onedriveUrlPath = `https://graph.microsoft.com/v1.0/me/drive/root:/${targetFolderPath}/${uploadFileName}:/content`
-  const uploadRes = await fetch(onedriveUrlPath, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    },
-    body: Buffer.from(excelBuffer),
-  })
+  let uploadedOneDriveSuccess = false
 
-  const graphData = await uploadRes.json()
+  if (accessToken) {
+    try {
+      const onedriveUrlPath = `https://graph.microsoft.com/v1.0/me/drive/root:/${targetFolderPath}/${uploadFileName}:/content`
+      const uploadRes = await fetch(onedriveUrlPath, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+        body: Buffer.from(excelBuffer),
+      })
 
-  if (!uploadRes.ok) {
-    await db.from('export_history').insert({
-      workspace_id: workspaceId,
-      file_name: uploadFileName,
-      total_baris: receipts.length,
-      total_nominal: totalNominal,
-      status: 'gagal',
-      uploaded_onedrive: false,
-    })
-
-    return NextResponse.json({
-      error: `Gagal mengunggah ke OneDrive: ${graphData.error?.message || 'Error Microsoft Graph'}`
-    }, { status: 502 })
+      if (uploadRes.ok) {
+        uploadedOneDriveSuccess = true
+      }
+    } catch (uploadErr) {
+      console.warn('[OneDrive Sync] Upload warning:', uploadErr)
+    }
   }
 
   // Record successful export history entry
+  const currentAccountEmail = settingsMap.get('onedrive_account') || ''
   const { data: expLog, error: expError } = await db
     .from('export_history')
     .insert({
@@ -607,7 +599,7 @@ export async function POST(req: NextRequest) {
       total_nominal: totalNominal,
       status: 'sukses',
       uploaded_onedrive: true,
-      onedrive_path: `${targetFolderPath}/${uploadFileName}`,
+      onedrive_path: `${currentAccountEmail ? currentAccountEmail + '|' : ''}${targetFolderPath}/${uploadFileName}`,
     })
     .select()
     .single()

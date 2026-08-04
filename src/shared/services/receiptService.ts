@@ -11,6 +11,7 @@
 
 import { supabase, createWorkspaceSupabaseClient } from './supabase'
 import { localDb, upsertLocalReceipt, softDeleteLocalReceipt, enqueueSyncOp } from '@/lib/local-db'
+import { receiptCache } from '@/lib/receipt-cache'
 import { serializeReceipt, deserializeReceipt } from '@/lib/serialize'
 import {
   getOcrStatus,
@@ -887,31 +888,65 @@ export const receiptService = {
     const existing = await this.getReceiptById(id)
     const now = new Date().toISOString()
     const workspaceId = existing?.workspaceId || '00000000-0000-4000-a000-000000000000'
-    const client = createWorkspaceSupabaseClient(workspaceId)
+    const receiptNum = existing?.receiptNumber || existing?.invoiceNumber
 
-    // 1. Hapus dari API route & server disk cache
+    // 1. Delete from cache immediately (by ID and by receiptNumber)
+    receiptCache.deleteReceipt(id)
+    if (receiptNum) {
+      receiptCache.deleteReceipt(receiptNum)
+    }
+
+    // 2. Delete via API endpoints
     try {
+      await fetch(`/api/receipts/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-workspace-id': workspaceId },
+      })
       await fetch(`/api/receipts?id=${id}`, {
         method: 'DELETE',
         headers: { 'x-workspace-id': workspaceId },
       })
+      if (receiptNum && receiptNum !== id) {
+        await fetch(`/api/receipts/${receiptNum}`, {
+          method: 'DELETE',
+          headers: { 'x-workspace-id': workspaceId },
+        })
+        await fetch(`/api/receipts?id=${receiptNum}`, {
+          method: 'DELETE',
+          headers: { 'x-workspace-id': workspaceId },
+        })
+      }
     } catch (apiErr) {
       console.warn('[Notabase] API delete warning:', apiErr)
     }
 
-    // 2. Hapus dari Supabase database
+    // 3. Delete from Supabase database & Dexie
     try {
-      await client.from('receipt_items').delete().eq('receipt_id', id)
-      await client.from('receipts').delete().eq('id', id)
+      const client = createWorkspaceSupabaseClient(workspaceId)
+      await client.from('receipt_items').delete().or(`receipt_id.eq.${id}`)
+      if (receiptNum) {
+        await client.from('receipt_items').delete().or(`receipt_id.eq.${receiptNum}`)
+      }
+      await client.from('receipts').update({ is_deleted: true, deleted_at: now } as any).or(`id.eq.${id}${receiptNum ? `,receipt_number.eq.${receiptNum}` : ''}`)
+      await client.from('receipts').delete().or(`id.eq.${id}${receiptNum ? `,receipt_number.eq.${receiptNum}` : ''}`)
+
       await softDeleteLocalReceipt(id, true)
+      if (receiptNum) {
+        await softDeleteLocalReceipt(receiptNum, true)
+      }
     } catch (err) {
       console.warn('[Notabase] Supabase delete warning:', err)
       await softDeleteLocalReceipt(id, false)
+      if (receiptNum) {
+        await softDeleteLocalReceipt(receiptNum, false)
+      }
     }
 
-    // 3. Trigger event update real-time ke seluruh UI & Dashboard
+    // 4. Dispatch events to refresh all UI tables and stats instantly
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('notabase_receipts_changed'))
+      window.dispatchEvent(new Event('receipts-updated'))
+      window.dispatchEvent(new Event('receipt-deleted'))
     }
   },
 }

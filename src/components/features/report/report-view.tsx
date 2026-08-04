@@ -38,7 +38,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { formatRupiah, formatDateShort, cn, isValidInvoiceNumber } from '@/lib/utils'
+import { localDb } from '@/lib/local-db'
+import { formatRupiah, formatDateShort, cn, isValidInvoiceNumber, getReportFilename } from '@/lib/utils'
 import type { Receipt } from '@/types'
 
 type Period = 'weekly' | 'monthly' | 'yearly'
@@ -53,7 +54,6 @@ const PERIOD_TABS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'Bulanan' },
   { value: 'yearly', label: 'Tahunan' },
 ]
-
 
 export function ReportView() {
   const { setTab } = useAppStore()
@@ -106,22 +106,33 @@ export function ReportView() {
       .then((d) => {
         if (d.account) setAccountEmail(d.account)
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [workspaceId])
 
-  const loadData = () => {
+  const loadData = async () => {
     setLoading(true)
-    const params = new URLSearchParams({ startDate, endDate, pageSize: '1000', sort: 'date-asc' })
-    fetch(`/api/receipts?${params}`, {
-      headers: { 'x-workspace-id': workspaceId },
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        setReceipts(d.data || [])
-        setHasLoaded(true)
+    const params = new URLSearchParams({ startDate, endDate, pageSize: '10000', sort: 'date-asc' })
+    try {
+      const r = await fetch(`/api/receipts?${params}`, {
+        headers: { 'x-workspace-id': workspaceId },
       })
-      .catch(() => toast.error('Gagal memuat laporan'))
-      .finally(() => setLoading(false))
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      const d = await r.json()
+      setReceipts(d.data || [])
+      setHasLoaded(true)
+    } catch (err) {
+      console.warn('[ReportView] API fetch failed, loading from local DB fallback:', err)
+      try {
+        if (typeof window !== 'undefined' && localDb?.receipts) {
+          const allLocal = await localDb.receipts.toArray().catch(() => [])
+          const valid = allLocal.filter((item) => !item.isDeleted)
+          setReceipts(valid as any)
+          setHasLoaded(true)
+        }
+      } catch { }
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -137,7 +148,7 @@ export function ReportView() {
           setExcelAutoUpload(d.excel_auto_upload === 'true' || d.excel_auto_upload === true)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
 
     const handleUpdate = () => loadData()
     window.addEventListener('receipts-updated', handleUpdate)
@@ -211,7 +222,7 @@ export function ReportView() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Laporan_Notabase_${period}_${year}.xlsx`
+      a.download = getReportFilename({ period, startDate, endDate, month: month + 1, year })
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -239,13 +250,13 @@ export function ReportView() {
       const folderName = isYearly
         ? 'Notabase/Ekspor Tahunan'
         : isWeekly
-        ? 'Notabase/Ekspor Mingguan'
-        : 'Notabase/Ekspor Bulanan'
+          ? 'Notabase/Ekspor Mingguan'
+          : 'Notabase/Ekspor Bulanan'
       const uploadFileName = isYearly
         ? `Laporan_Notabase_Tahunan_${year}.xlsx`
         : isWeekly
-        ? `Laporan_Notabase_Mingguan_${year}_M${weekNum}.xlsx`
-        : `Laporan_Notabase_Bulanan_${year}_${String(month + 1).padStart(2, '0')}.xlsx`
+          ? `Laporan_Notabase_Mingguan_${year}_M${weekNum}.xlsx`
+          : `Laporan_Notabase_Bulanan_${year}_${String(month + 1).padStart(2, '0')}.xlsx`
 
       const res = await fetch('/api/sync', {
         method: 'POST',
@@ -268,8 +279,7 @@ export function ReportView() {
         throw new Error(data.error || 'Gagal sinkronisasi ke OneDrive')
       }
 
-      const targetEmail = data.account || accountEmail
-      toast.success(`Laporan berhasil diunggah ke ${folderName} (${targetEmail})!`)
+      toast.success('Berhasil diunggah ke OneDrive!')
     } catch (err: any) {
       toast.error(err.message || 'Gagal sinkronisasi ke OneDrive')
     } finally {
@@ -283,9 +293,10 @@ export function ReportView() {
     const subFolder = isYearly ? 'Ekspor Tahunan' : isWeekly ? 'Ekspor Mingguan' : 'Ekspor Bulanan'
     const folderPath = `Notabase/${subFolder}`
 
-    // Try to open via API to get direct webUrl from Microsoft Graph
+    const tid = toast.loading(`Mempersiapkan folder ${subFolder} di OneDrive...`)
+
     try {
-      const res = await fetch('/api/sync', {
+      await fetch('/api/sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -293,16 +304,14 @@ export function ReportView() {
         },
         body: JSON.stringify({ action: 'create_folder', folderPath }),
       })
-      const data = await res.json()
-      if (data.webUrl) {
-        window.open(data.webUrl, '_blank', 'noopener,noreferrer')
-        return
-      }
-    } catch {}
+    } catch {
+      // ignore
+    } finally {
+      toast.dismiss(tid)
+    }
 
-    // Fallback: open OneDrive My Files tab at the folder path
-    const encodedPath = encodeURIComponent(`/${folderPath}`)
-    window.open(`https://onedrive.live.com/?v=myfiles&path=${encodedPath}`, '_blank', 'noopener,noreferrer')
+    // Open official My Files page (lands directly on My files, where Notabase is located)
+    window.open('https://onedrive.live.com/?v=myfiles', '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -351,12 +360,12 @@ export function ReportView() {
               <svg className="w-full h-full drop-shadow-lg" viewBox="0 0 160 120" fill="none">
                 {/* 3D Card Base */}
                 <rect x="20" y="22" width="120" height="80" rx="16" fill="#FFFFFF" opacity="0.95" />
-                
+
                 {/* 3D Bar Chart Columns */}
                 <rect x="38" y="52" width="18" height="40" rx="5" fill="#60A5FA" />
                 <rect x="62" y="36" width="18" height="56" rx="5" fill="#2563EB" />
                 <rect x="86" y="62" width="18" height="30" rx="5" fill="#93C5FD" />
-                
+
                 {/* 3D Donut Chart Element */}
                 <circle cx="122" cy="42" r="16" fill="#C084FC" opacity="0.9" />
                 <path d="M122 42 L134 42 A12 12 0 0 0 122 30 Z" fill="#9333EA" />
@@ -482,7 +491,7 @@ export function ReportView() {
               </span>
               <div className="flex items-center gap-1 text-[11px] text-blue-600 font-bold">
                 <TrendingUp className="h-3.5 w-3.5" />
-                <span>14% dari bulan lalu</span>
+                <span>{stats.count} Nota Terdaftar</span>
               </div>
             </div>
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100/80 text-blue-600 ml-4">
@@ -533,40 +542,40 @@ export function ReportView() {
               <TableBody>
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-36" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      </TableRow>
-                    ))
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    </TableRow>
+                  ))
                   : previewRows.slice(0, 5).map((row) => (
-                      <TableRow key={row.key} className="hover:bg-slate-50 transition-colors">
-                        <TableCell className="text-xs text-slate-600 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-blue-500 shrink-0" />
-                            <span>{formatDateShort(row.date)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-slate-700">
-                          {isValidInvoiceNumber(row.invoiceNumber) ? row.invoiceNumber : '-'}
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-800 font-semibold">
-                          {row.merchantName}
-                        </TableCell>
-                        <TableCell className="text-center text-xs text-slate-600 font-medium">
-                          {row.qty}
-                        </TableCell>
-                        <TableCell className="text-right text-xs text-slate-600">
-                          {formatRupiah(row.price)}
-                        </TableCell>
-                        <TableCell className="text-right font-extrabold text-slate-900 text-xs">
-                          {formatRupiah(row.total)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    <TableRow key={row.key} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-blue-500 shrink-0" />
+                          <span>{formatDateShort(row.date)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-slate-700">
+                        {isValidInvoiceNumber(row.invoiceNumber) ? row.invoiceNumber : '-'}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-800 font-semibold">
+                        {row.merchantName}
+                      </TableCell>
+                      <TableCell className="text-center text-xs text-slate-600 font-medium">
+                        {row.qty}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-slate-600">
+                        {formatRupiah(row.price)}
+                      </TableCell>
+                      <TableCell className="text-right font-extrabold text-slate-900 text-xs">
+                        {formatRupiah(row.total)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
 
@@ -582,25 +591,25 @@ export function ReportView() {
               <TableBody>
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      </TableRow>
-                    ))
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    </TableRow>
+                  ))
                   : previewRows.slice(0, 5).map((row) => (
-                      <TableRow key={row.key} className="hover:bg-slate-50 transition-colors">
-                        <TableCell className="text-[11px] text-slate-600 whitespace-nowrap py-3">
-                          {formatDateShort(row.date)}
-                        </TableCell>
-                        <TableCell className="text-[11px] text-slate-800 font-semibold py-3 max-w-[160px] truncate">
-                          {row.merchantName}
-                        </TableCell>
-                        <TableCell className="text-right font-extrabold text-slate-900 text-[11px] py-3 whitespace-nowrap">
-                          {formatRupiah(row.total)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    <TableRow key={row.key} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="text-[11px] text-slate-600 whitespace-nowrap py-3">
+                        {formatDateShort(row.date)}
+                      </TableCell>
+                      <TableCell className="text-[11px] text-slate-800 font-semibold py-3 max-w-[160px] truncate">
+                        {row.merchantName}
+                      </TableCell>
+                      <TableCell className="text-right font-extrabold text-slate-900 text-[11px] py-3 whitespace-nowrap">
+                        {formatRupiah(row.total)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
 

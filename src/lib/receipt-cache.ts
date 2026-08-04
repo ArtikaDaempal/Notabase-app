@@ -5,8 +5,7 @@
  * even when Supabase is offline or operating under RLS isolation.
  */
 
-import fs from 'fs'
-import path from 'path'
+import { isValidInvoiceNumber } from '@/lib/utils'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const globalForCache = globalThis as typeof globalThis & { _notabaseReceiptCache?: Map<string, any>; _cacheLoadedFromDisk?: boolean }
@@ -16,14 +15,29 @@ if (process.env.NODE_ENV !== 'production') {
   globalForCache._notabaseReceiptCache = receiptCacheMap
 }
 
-const STORE_PATH = path.join(process.cwd(), '.data', 'local_receipts_store.json')
+function getFsAndPath() {
+  if (typeof window !== 'undefined') return null
+  try {
+    // Use eval require to prevent Webpack bundling Node's 'fs' module into browser chunks
+    const req = eval('require')
+    const fs = req('fs')
+    const path = req('path')
+    return { fs, path }
+  } catch {
+    return null
+  }
+}
 
 function loadFromDisk() {
+  if (typeof window !== 'undefined') return
   if (globalForCache._cacheLoadedFromDisk) return
   globalForCache._cacheLoadedFromDisk = true
   try {
-    if (fs.existsSync(STORE_PATH)) {
-      const data = fs.readFileSync(STORE_PATH, 'utf-8')
+    const mod = getFsAndPath()
+    if (!mod) return
+    const storePath = mod.path.join(process.cwd(), '.data', 'local_receipts_store.json')
+    if (mod.fs.existsSync(storePath)) {
+      const data = mod.fs.readFileSync(storePath, 'utf-8')
       const items = JSON.parse(data)
       if (Array.isArray(items)) {
         for (const item of items) {
@@ -39,19 +53,21 @@ function loadFromDisk() {
 }
 
 function saveToDisk() {
+  if (typeof window !== 'undefined') return
   try {
-    const dir = path.dirname(STORE_PATH)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
+    const mod = getFsAndPath()
+    if (!mod) return
+    const storePath = mod.path.join(process.cwd(), '.data', 'local_receipts_store.json')
+    const dir = mod.path.dirname(storePath)
+    if (!mod.fs.existsSync(dir)) {
+      mod.fs.mkdirSync(dir, { recursive: true })
     }
     const items = Array.from(receiptCacheMap.values())
-    fs.writeFileSync(STORE_PATH, JSON.stringify(items, null, 2), 'utf-8')
+    mod.fs.writeFileSync(storePath, JSON.stringify(items, null, 2), 'utf-8')
   } catch (err) {
     console.warn('[ReceiptCache] Error saving disk store:', err)
   }
 }
-
-import { isValidInvoiceNumber } from '@/lib/utils'
 
 // Initial load
 loadFromDisk()
@@ -133,9 +149,23 @@ export const receiptCache = {
 
   deleteReceipt(id: string) {
     if (!id) return false
-    const res = receiptCacheMap.delete(id)
+    let deletedCount = 0
+    const target = String(id).trim().toLowerCase()
+
+    for (const [key, value] of Array.from(receiptCacheMap.entries())) {
+      const k = String(key).trim().toLowerCase()
+      const vId = value?.id ? String(value.id).trim().toLowerCase() : ''
+      const vNum = value?.receiptNumber || value?.invoiceNumber || value?.receipt_number || ''
+      const vNumClean = String(vNum).trim().toLowerCase()
+
+      if (k === target || vId === target || (vNumClean && vNumClean === target)) {
+        receiptCacheMap.delete(key)
+        deletedCount++
+      }
+    }
+
     saveToDisk()
-    return res
+    return deletedCount > 0
   },
 
   getAllReceipts(workspaceId?: string) {
@@ -143,16 +173,31 @@ export const receiptCache = {
     const list = Array.from(receiptCacheMap.values()).filter(
       (r) => !r.is_deleted && !r.isDeleted && !r.pendingDelete
     )
-    if (!workspaceId || workspaceId === 'all') return list.map(formatReceiptObject)
-    const isDefault = (id?: string) => !id || id === 'default-workspace-id' || id === '00000000-0000-4000-a000-000000000000' || id === 'DEFAULT' || id === 'default-workspace'
-    const targetIsDefault = isDefault(workspaceId)
 
-    return list
-      .filter((r) => {
-        const itemWs = r.workspaceId || r.workspace_id
-        if (targetIsDefault && isDefault(itemWs)) return true
-        return itemWs === workspaceId
-      })
-      .map(formatReceiptObject)
+    const seen = new Set<string>()
+    const deduplicated: any[] = []
+
+    for (const r of list) {
+      const idKey = r.id
+      const inv = (r.receiptNumber || r.invoiceNumber || '').trim()
+      const merchant = (r.namaToko || r.merchantName || '').trim()
+      const nom = Number(r.nominal ?? r.total ?? 0)
+      const date = (r.tanggal || r.transactionDate || '').split('T')[0]
+
+      const contentKey = inv ? `inv:${inv}` : `m:${merchant}_n:${nom}_d:${date}`
+
+      if (seen.has(idKey) || (contentKey && seen.has(contentKey))) {
+        continue
+      }
+      seen.add(idKey)
+      if (contentKey) seen.add(contentKey)
+
+      deduplicated.push(formatReceiptObject({
+        ...r,
+        workspaceId: '00000000-0000-4000-a000-000000000000',
+      }))
+    }
+
+    return deduplicated
   },
 }

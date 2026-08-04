@@ -11,7 +11,12 @@ const DEVICE_NAME_KEY = 'notabase_device_name'
 const DEVICE_ID_KEY = 'notabase_device_id'
 
 export function isDeviceUnlocked(): boolean {
-  return true
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(DEVICE_UNLOCKED_KEY) === 'true'
+  } catch {
+    return false
+  }
 }
 
 export function getDeviceName(): string {

@@ -282,8 +282,24 @@ export async function getLocalReceipt(id: string): Promise<LocalReceipt | undefi
  * Jika sudah synced ke Supabase, tambahkan ke syncQueue untuk propagasi.
  */
 export async function softDeleteLocalReceipt(id: string, synced: boolean): Promise<void> {
-  // Permanently remove receipt from local IndexedDB
+  // Permanently remove receipt from local IndexedDB by ID and receiptNumber
+  if (!id) return
   await localDb.receipts.delete(id)
+  try {
+    const all = await localDb.receipts.toArray()
+    const target = String(id).trim().toLowerCase()
+    for (const r of all) {
+      if (
+        String(r.id).trim().toLowerCase() === target ||
+        String(r.receiptNumber || '').trim().toLowerCase() === target ||
+        String(r.supabaseId || '').trim().toLowerCase() === target
+      ) {
+        await localDb.receipts.delete(r.id)
+      }
+    }
+  } catch (err) {
+    console.warn('[IndexedDB Delete Warning]', err)
+  }
 }
 
 /** Add an entry to the sync queue (BR-SYNC-02). */

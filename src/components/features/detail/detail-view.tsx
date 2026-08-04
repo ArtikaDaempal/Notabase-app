@@ -92,7 +92,7 @@ export function DetailView() {
 
   const handleDelete = async () => {
     if (!receipt) return
-    if (!confirm('Hapus nota ini secara permanen dari aplikasi dan database Supabase?')) return
+    if (!confirm('Hapus nota ini?')) return
     try {
       const res = await fetch(`/api/receipts/${receipt.id}`, {
         method: 'DELETE',

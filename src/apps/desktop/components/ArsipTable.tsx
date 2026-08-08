@@ -55,15 +55,7 @@ const SOURCE_BADGE: Record<
   manual: { label: 'Manual', icon: FileText, color: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300' },
 }
 
-const KATEGORI_TAG_COLOR: Record<string, string> = {
-  ATK: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-  Konsumsi: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
-  Operasional: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
-  Transportasi: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
-  Utilitas: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
-  Referensi: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300',
-  Lainnya: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400',
-}
+
 
 export function ArsipTable({
   receipts,
@@ -137,13 +129,9 @@ export function ArsipTable({
                   const receiptNumber = isValidInvoiceNumber(rawInv) ? rawInv : '-'
                   const dateStr = r.tanggal || r.transactionDate
                   const nominal = r.nominal ?? r.total ?? 0
-                  const kategori = r.kategori || 'Lainnya'
-
                   const sourceKey = (r.receiptType ?? 'scan') as keyof typeof SOURCE_BADGE
                   const source = SOURCE_BADGE[sourceKey] ?? SOURCE_BADGE.scan
                   const SourceIcon = source.icon
-
-                  const tagStyle = KATEGORI_TAG_COLOR[kategori] || KATEGORI_TAG_COLOR.Lainnya
 
                   return (
                     <TableRow
@@ -220,7 +208,7 @@ export function ArsipTable({
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-48 text-center">
+                  <TableCell colSpan={8} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <FileText className="h-10 w-10 text-slate-300 dark:text-slate-600" />
                       <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tidak ada nota ditemukan</p>

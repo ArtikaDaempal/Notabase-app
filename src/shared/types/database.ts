@@ -108,7 +108,6 @@ export interface Database {
           image_url: string | null
           tanggal: string
           nama_toko: string
-          kategori: string | null
           nominal: number
           diskon: number
           pajak: number
@@ -132,7 +131,6 @@ export interface Database {
           image_url?: string | null
           tanggal: string
           nama_toko: string
-          kategori?: string | null
           nominal?: number
           diskon?: number
           pajak?: number
@@ -156,7 +154,6 @@ export interface Database {
           image_url?: string | null
           tanggal?: string
           nama_toko?: string
-          kategori?: string | null
           nominal?: number
           diskon?: number
           pajak?: number

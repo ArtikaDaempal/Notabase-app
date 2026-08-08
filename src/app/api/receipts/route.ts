@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
   const maxAmount = searchParams.get('maxAmount')
   const hasImage = searchParams.get('hasImage') === 'true'
   const receiptType = searchParams.get('receiptType') || ''
-  const kategori = searchParams.get('kategori') || ''
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
   const pageSize = Math.max(1, Math.min(10000, parseInt(searchParams.get('pageSize') || '12', 10)))
 
@@ -224,7 +223,6 @@ export async function POST(req: NextRequest) {
           diskon: Number(body.diskon) || 0,
           pajak: Number(body.pajak) || 0,
           keterangan: body.keterangan || body.description || null,
-          kategori: body.kategori || 'Lainnya',
           metode_pembayaran: body.metodePembayaran || null,
           image_url: body.imageUrl || null,
           ocr_raw_text: body.ocrRawText || body.ocrText || null,
@@ -273,7 +271,6 @@ export async function POST(req: NextRequest) {
       pajak: Number(body.pajak) || 0,
       keterangan: body.keterangan || body.description || null,
       description: body.keterangan || body.description || null,
-      kategori: body.kategori || 'Lainnya',
       metodePembayaran: body.metodePembayaran || null,
       imageUrl: body.imageUrl || null,
       ocrRawText: body.ocrRawText || body.ocrText || null,

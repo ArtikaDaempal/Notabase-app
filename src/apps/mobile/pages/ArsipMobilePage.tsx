@@ -60,13 +60,11 @@ export function ArsipMobilePage({
   // Store & Query Hooks
   const {
     searchQuery,
-    kategori,
     statusOcr,
     startDate,
     endDate,
     selectedReceiptId,
     setSearchQuery,
-    setKategori,
     setStatusOcr,
     setDateRange,
     setSelectedReceiptId,
@@ -149,7 +147,7 @@ export function ArsipMobilePage({
               onClick={() => setShowFilters((p) => !p)}
               className={cn(
                 'absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-xl text-slate-400 transition-colors',
-                (kategori || statusOcr || startDate) && 'text-blue-600 bg-blue-50 dark:bg-blue-950',
+                (statusOcr || startDate) && 'text-blue-600 bg-blue-50 dark:bg-blue-950',
               )}
               title="Toggle Filter"
             >

@@ -58,7 +58,6 @@ export function DashboardView() {
             d.recent.slice(0, 5).map((r: any) => ({
               id: r.id,
               namaToko: r.namaToko || r.merchantName || 'Lainnya',
-              kategori: r.kategori || 'Nota',
               tanggal: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(
                 new Date(r.tanggal || r.transactionDate || Date.now())
               ),
@@ -80,7 +79,6 @@ export function DashboardView() {
           localItems.slice(0, 5).map((r: any) => ({
             id: r.id,
             namaToko: r.namaToko || 'Lainnya',
-            kategori: r.kategori || 'Nota',
             tanggal: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(
               new Date(r.tanggal || r.createdAt || Date.now())
             ),
@@ -99,13 +97,46 @@ export function DashboardView() {
   }
 
   useEffect(() => {
+    // 1. Instantly load offline IndexedDB cache for zero-latency initial UI
+    const loadLocalCacheFirst = async () => {
+      try {
+        if (typeof window !== 'undefined' && localDb?.receipts) {
+          const allLocal = await localDb.receipts.toArray().catch(() => [])
+          const localItems = allLocal.filter((r) => !r.isDeleted)
+          if (localItems.length > 0) {
+            const sumArr = (arr: any[]) => arr.reduce((a, b) => a + (Number(b.nominal) || 0), 0)
+            setStatsData((prev: any) => prev || {
+              today: { count: localItems.length, total: sumArr(localItems), subtext: '' },
+              week: { count: localItems.length, total: sumArr(localItems), subtext: '' },
+              month: { count: localItems.length, total: sumArr(localItems), subtext: '' },
+              allTime: { count: localItems.length, total: sumArr(localItems) },
+            })
+            setRecentReceipts((prev) => prev.length > 0 ? prev : localItems.slice(0, 5).map((r: any) => ({
+              id: r.id,
+              namaToko: r.namaToko || 'Lainnya',
+              tanggal: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(
+                new Date(r.tanggal || r.createdAt || Date.now())
+              ),
+              nominal: Number(r.nominal || 0),
+            })))
+            setLoading(false)
+          }
+        }
+      } catch {}
+    }
+
+    loadLocalCacheFirst()
     fetchStats()
-    const interval = setInterval(fetchStats, 4000)
+    const interval = setInterval(fetchStats, 15000)
     const handleDataChange = () => fetchStats()
     window.addEventListener('notabase_receipts_changed', handleDataChange)
+    window.addEventListener('receipts-updated', handleDataChange)
+    window.addEventListener('receipt-saved', handleDataChange)
     return () => {
       clearInterval(interval)
       window.removeEventListener('notabase_receipts_changed', handleDataChange)
+      window.removeEventListener('receipts-updated', handleDataChange)
+      window.removeEventListener('receipt-saved', handleDataChange)
     }
   }, [workspaceId])
 

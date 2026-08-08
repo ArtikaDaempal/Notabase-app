@@ -20,7 +20,6 @@ export type SortOption =
 export interface ReceiptState {
   // ── Filter State ──
   searchQuery: string
-  kategori: string | null
   receiptType: ReceiptType | null
   statusOcr: StatusOcr | null
   startDate: string | null           // "YYYY-MM-DD"
@@ -37,7 +36,6 @@ export interface ReceiptState {
 
   // ── Actions ──
   setSearchQuery: (query: string) => void
-  setKategori: (kategori: string | null) => void
   setReceiptType: (receiptType: ReceiptType | null) => void
   setStatusOcr: (statusOcr: StatusOcr | null) => void
   setDateRange: (startDate: string | null, endDate: string | null) => void
@@ -53,7 +51,6 @@ export interface ReceiptState {
 
 const initialFilterState = {
   searchQuery: '',
-  kategori: null,
   receiptType: null,
   statusOcr: null,
   startDate: null,
@@ -71,7 +68,6 @@ export const useReceiptStore = create<ReceiptState>((set) => ({
   isFilterOpen: false,
 
   setSearchQuery: (searchQuery) => set({ searchQuery, page: 1 }),
-  setKategori: () => {},
   setReceiptType: (receiptType) => set({ receiptType, page: 1 }),
   setStatusOcr: (statusOcr) => set({ statusOcr, page: 1 }),
   setDateRange: (startDate, endDate) => set({ startDate, endDate, page: 1 }),

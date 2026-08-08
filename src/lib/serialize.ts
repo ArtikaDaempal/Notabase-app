@@ -28,7 +28,6 @@ export function serializeReceipt(
 
     tanggal: r.tanggal,
     namaToko: r.nama_toko,
-    kategori: r.kategori,
     nominal: r.nominal,
     diskon: r.diskon,
     pajak: r.pajak,
@@ -63,7 +62,6 @@ export function deserializeReceipt(
   if (r.imageUrl !== undefined) row.image_url = r.imageUrl
   if (r.tanggal !== undefined) row.tanggal = r.tanggal
   if (r.namaToko !== undefined) row.nama_toko = r.namaToko
-  if (r.kategori !== undefined) row.kategori = r.kategori
   if (r.nominal !== undefined) row.nominal = r.nominal
   if (r.diskon !== undefined) row.diskon = r.diskon
   if (r.pajak !== undefined) row.pajak = r.pajak

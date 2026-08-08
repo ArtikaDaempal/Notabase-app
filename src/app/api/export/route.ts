@@ -18,64 +18,67 @@ export async function POST(req: NextRequest) {
     month,
     startDate,
     endDate,
-  } = body as { period?: string; year?: number; month?: number; startDate?: string; endDate?: string }
+    singleReceipt,
+  } = body as { period?: string; year?: number; month?: number; startDate?: string; endDate?: string; singleReceipt?: Record<string, any> }
 
   const startStr = startDate ? startDate.split('T')[0] : ''
   const endStr = endDate ? endDate.split('T')[0] : ''
 
-  let mappedDbRows: any[] = []
-  try {
-    let query = db
-      .from('receipts')
-      .select('*, receipt_items(*)')
-      .eq('is_deleted', false)
+  // If singleReceipt is provided (from OCR Preview page), use it directly
+  let merged: any[] = []
 
-    if (workspaceId) {
-      // Only use valid UUIDs in Supabase query
-      query = query.or(`workspace_id.eq.${workspaceId},workspace_id.eq.00000000-0000-4000-a000-000000000000`)
+  if (singleReceipt) {
+    merged = [singleReceipt]
+  } else {
+    let mappedDbRows: any[] = []
+    try {
+      let query = db
+        .from('receipts')
+        .select('*, receipt_items(*)')
+        .eq('is_deleted', false)
+
+      if (workspaceId) {
+        query = query.or(`workspace_id.eq.${workspaceId},workspace_id.eq.00000000-0000-4000-a000-000000000000`)
+      }
+
+      if (startStr) { query = query.gte('tanggal', startStr) }
+      if (endStr) { query = query.lte('tanggal', endStr) }
+      query = query.order('tanggal', { ascending: true })
+
+      const { data } = await query
+      mappedDbRows = (data || []).map((r: any) => {
+        const items = r.receipt_items
+          ? r.receipt_items.map((it: any) => ({
+              namaBarang: it.nama_barang,
+              qty: it.qty,
+              harga: it.harga,
+              subtotal: it.subtotal,
+              keterangan: it.keterangan || null,
+              name: it.nama_barang,
+              price: it.harga,
+              total: it.subtotal,
+            }))
+          : undefined
+        const serialized = serializeReceipt(r, items)
+        return { ...serialized, items }
+      })
+    } catch (dbErr) {
+      console.warn('[API /api/export] Supabase fetch warning:', dbErr)
     }
 
-    if (startStr) {
-      query = query.gte('tanggal', startStr)
-    }
-    if (endStr) {
-      query = query.lte('tanggal', endStr)
-    }
-
-    query = query.order('tanggal', { ascending: true })
-
-    const { data } = await query
-    mappedDbRows = (data || []).map((r: any) => {
-      const items = r.receipt_items
-        ? r.receipt_items.map((it: any) => ({
-            namaBarang: it.nama_barang,
-            qty: it.qty,
-            harga: it.harga,
-            subtotal: it.subtotal,
-            name: it.nama_barang,
-            price: it.harga,
-            total: it.subtotal,
-          }))
-        : undefined
-      const serialized = serializeReceipt(r, items)
-      return { ...serialized, items }
+    // Fetch cached receipts for offline resilience
+    const cached = receiptCache.getAllReceipts(workspaceId)
+    const dbIds = new Set(mappedDbRows.map((r: any) => r.id))
+    const filteredCache = cached.filter((r) => {
+      if (dbIds.has(r.id)) return false
+      const rDate = (r.tanggal || r.transactionDate || '').split('T')[0]
+      if (startStr && rDate && rDate < startStr) return false
+      if (endStr && rDate && rDate > endStr) return false
+      return true
     })
-  } catch (dbErr) {
-    console.warn('[API /api/export] Supabase fetch warning:', dbErr)
+
+    merged = [...mappedDbRows, ...filteredCache]
   }
-
-  // Fetch cached receipts for offline resilience
-  const cached = receiptCache.getAllReceipts(workspaceId)
-  const dbIds = new Set(mappedDbRows.map((r: any) => r.id))
-  const filteredCache = cached.filter((r) => {
-    if (dbIds.has(r.id)) return false
-    const rDate = (r.tanggal || r.transactionDate || '').split('T')[0]
-    if (startStr && rDate && rDate < startStr) return false
-    if (endStr && rDate && rDate > endStr) return false
-    return true
-  })
-
-  const merged = [...mappedDbRows, ...filteredCache]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const receipts = merged.map((r: any) => {
@@ -85,7 +88,8 @@ export async function POST(req: NextRequest) {
     const ocrText = r.ocrRawText || r.ocrText || ''
 
     let address = ''
-    if (isValidAddress(r.alamat)) address = r.alamat
+    if (isValidAddress(r.alamatToko)) address = r.alamatToko
+    else if (isValidAddress(r.alamat)) address = r.alamat
     else if (isValidAddress(r.merchantAddress)) address = r.merchantAddress
     else address = extractAddressFromOcr(ocrText)
 
@@ -98,6 +102,12 @@ export async function POST(req: NextRequest) {
     return {
       ...r,
       nominal: r.nominal ?? r.total ?? 0,
+      diskon: Number(r.diskon ?? r.diskonNominal ?? 0),
+      pajak: Number(r.pajak ?? r.pajakNominal ?? 0),
+      biayaTambahan: Number(r.biayaTambahan ?? 0),
+      waktu: r.waktu || '',
+      sumberDana: r.sumberDana || '',
+      metodePembayaran: r.metodePembayaran || '',
       namaToko: r.namaToko || r.merchantName || 'Lainnya',
       alamat: address,
       noTelepon: phone,
@@ -134,17 +144,23 @@ export async function POST(req: NextRequest) {
   })
 
   detail.columns = [
-    { width: 6 },  // 1. No
-    { width: 18 }, // 2. No. Nota
-    { width: 24 }, // 3. Nama Toko
-    { width: 28 }, // 4. Alamat Toko
-    { width: 20 }, // 5. No. Telepon
-    { width: 14 }, // 6. Tanggal
-    { width: 26 }, // 7. Nama Barang
-    { width: 12 }, // 8. Banyaknya
-    { width: 18 }, // 9. Harga Satuan (Rp)
-    { width: 18 }, // 10. Nominal (Rp)
-    { width: 35 }, // 11. Keterangan
+    { width: 6 },  // 1.  No
+    { width: 20 }, // 2.  No. Nota
+    { width: 26 }, // 3.  Nama Toko
+    { width: 14 }, // 4.  Tanggal
+    { width: 28 }, // 5.  Nama Barang
+    { width: 12 }, // 6.  Banyaknya
+    { width: 18 }, // 7.  Harga Satuan (Rp)
+    { width: 18 }, // 8.  Nominal (Rp)
+    { width: 16 }, // 9.  Diskon (Rp)
+    { width: 16 }, // 10. Pajak (Rp)
+    { width: 18 }, // 11. Total Transaksi (Rp)
+    { width: 22 }, // 12. Metode Pembayaran
+    { width: 30 }, // 13. Alamat Toko
+    { width: 18 }, // 14. No. Telepon
+    { width: 12 }, // 15. Waktu
+    { width: 28 }, // 16. Sumber Dana
+    { width: 35 }, // 17. Keterangan
   ]
 
   const MONTHS = [
@@ -168,27 +184,34 @@ export async function POST(req: NextRequest) {
     'No',
     'No. Nota',
     'Nama Toko',
-    'Alamat Toko',
-    'No. Telepon',
     'Tanggal',
     'Nama Barang',
     'Banyaknya',
     'Harga Satuan (Rp)',
     'Nominal (Rp)',
+    'Diskon (Rp)',
+    'Pajak (Rp)',
+    'Total Transaksi (Rp)',
+    'Metode Pembayaran',
+    'Alamat Toko',
+    'No. Telepon',
+    'Waktu',
+    'Sumber Dana',
     'Keterangan',
   ]
+  const TOTAL_COLS = headers.length
 
   // Insert Komdigi Official Header Block if enabled
   if (includeKomdigiHeader) {
     const h1 = detail.addRow(['KEMENTERIAN KOMUNIKASI DAN DIGITAL REPUBLIK INDONESIA (KOMDIGI)'])
-    detail.mergeCells(h1.number, 1, h1.number, 11)
+    detail.mergeCells(h1.number, 1, h1.number, TOTAL_COLS)
     h1.height = 24
     h1.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
     h1.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B1E48' } }
     h1.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' }
 
     const h2 = detail.addRow(['BPPKI MANADO — NOTABASE DIGITAL RECEIPT MANAGEMENT SYSTEM'])
-    detail.mergeCells(h2.number, 1, h2.number, 11)
+    detail.mergeCells(h2.number, 1, h2.number, TOTAL_COLS)
     h2.height = 20
     h2.getCell(1).font = { bold: true, color: { argb: 'FF93C5FD' }, size: 10 }
     h2.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
@@ -204,7 +227,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Add Title Banner Row
     const titleRow = detail.addRow([`Rekap Laporan Nota — ${monthName} ${yr}`])
-    detail.mergeCells(titleRow.number, 1, titleRow.number, 11)
+    detail.mergeCells(titleRow.number, 1, titleRow.number, TOTAL_COLS)
     titleRow.height = 28
     const cell = titleRow.getCell(1)
     cell.font = { bold: true, color: { argb: 'FF1E3A8A' }, size: 12 }
@@ -237,20 +260,27 @@ export async function POST(req: NextRequest) {
           const itemName = item.namaBarang || item.name || 'Item'
           const itemQty = Number(item.qty) || 1
           const itemPrice = Number(item.harga ?? item.price ?? 0)
-          const itemTotal = Number(item.subtotal ?? item.total ?? (itemQty * itemPrice))
+          const itemSubtotal = Number(item.subtotal ?? item.total ?? (itemQty * itemPrice))
+          const itemKet = item.keterangan || r.keterangan || ''
 
           const row = detail.addRow([
             rowCounter++,
             r.receiptNumber,
             r.namaToko,
-            r.alamat || '',
-            r.noTelepon || '',
             formattedDate,
             itemName,
             itemQty,
             itemPrice,
-            itemTotal,
-            r.keterangan,
+            itemSubtotal,
+            r.diskon || 0,
+            r.pajak || 0,
+            r.nominal,
+            r.metodePembayaran || '',
+            r.alamat || '',
+            r.noTelepon || '',
+            r.waktu || '',
+            r.sumberDana || '',
+            itemKet,
           ])
           row.height = 20
           row.eachCell((cell, colNumber) => {
@@ -258,18 +288,18 @@ export async function POST(req: NextRequest) {
             cell.border = {
               bottom: { style: 'thin', color: { argb: 'FFF3F4F6' } },
             }
-            if (colNumber === 8) {
+            // Qty (col 6)
+            if (colNumber === 6) {
               cell.numFmt = '#,##0'
               cell.alignment = { vertical: 'middle', horizontal: 'center' }
             }
-            if (colNumber === 9 || colNumber === 10) {
+            // Harga Satuan (col 7), Nominal (col 8), Diskon (col 9), Pajak (col 10), Total (col 11)
+            if ([7, 8, 9, 10, 11].includes(colNumber)) {
               cell.numFmt = '#,##0'
               cell.alignment = { vertical: 'middle', horizontal: 'right' }
             }
-            if (colNumber === 10) {
-              cell.font = { bold: true }
-            }
-            if (colNumber === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' }
+            if (colNumber === 11) { cell.font = { bold: true } }
+            if (colNumber === 1) { cell.alignment = { horizontal: 'center', vertical: 'middle' } }
           })
         })
       } else {
@@ -278,13 +308,19 @@ export async function POST(req: NextRequest) {
           rowCounter++,
           r.receiptNumber || '',
           r.namaToko,
-          r.alamat || '',
-          r.noTelepon || '',
           formattedDate,
           fallbackItemName,
           1,
           r.nominal,
           r.nominal,
+          r.diskon || 0,
+          r.pajak || 0,
+          r.nominal,
+          r.metodePembayaran || '',
+          r.alamat || '',
+          r.noTelepon || '',
+          r.waktu || '',
+          r.sumberDana || '',
           r.keterangan || '',
         ])
         row.height = 20
@@ -293,25 +329,23 @@ export async function POST(req: NextRequest) {
           cell.border = {
             bottom: { style: 'thin', color: { argb: 'FFF3F4F6' } },
           }
-          if (colNumber === 8) {
+          if (colNumber === 6) {
             cell.numFmt = '#,##0'
             cell.alignment = { vertical: 'middle', horizontal: 'center' }
           }
-          if (colNumber === 9 || colNumber === 10) {
+          if ([7, 8, 9, 10, 11].includes(colNumber)) {
             cell.numFmt = '#,##0'
             cell.alignment = { vertical: 'middle', horizontal: 'right' }
           }
-          if (colNumber === 10) {
-            cell.font = { bold: true }
-          }
-          if (colNumber === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' }
+          if (colNumber === 11) { cell.font = { bold: true } }
+          if (colNumber === 1) { cell.alignment = { horizontal: 'center', vertical: 'middle' } }
         })
       }
     })
 
     // 4. Add TOTAL row
     const groupTotal = groupReceipts.reduce((a, b) => a + (b.nominal || 0), 0)
-    const totalRow = detail.addRow(['', '', '', '', '', '', '', '', 'TOTAL', groupTotal, ''])
+    const totalRow = detail.addRow(['', '', '', '', '', '', '', '', '', '', 'TOTAL', groupTotal, '', '', '', '', ''])
     totalRow.height = 24
     totalRow.eachCell((cell, colNumber) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } }
@@ -320,7 +354,7 @@ export async function POST(req: NextRequest) {
         top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
         bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } }
       }
-      if (colNumber === 10) {
+      if (colNumber === 12) {
         cell.numFmt = '#,##0'
         cell.alignment = { horizontal: 'right', vertical: 'middle' }
       }

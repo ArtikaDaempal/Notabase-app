@@ -62,6 +62,11 @@ export function DetailView() {
         const rawInv = d.receipt_number || d.receiptNumber || d.invoice_number || d.invoiceNumber || ''
         const cleanInv = isValidInvoiceNumber(rawInv) ? rawInv : ''
         const cleanDate = d.tanggal || d.transactionDate ? String(d.tanggal || d.transactionDate).slice(0, 10) : ''
+        const rawOcr = d.ocr_raw_text || d.ocrRawText || d.ocrText || ''
+        const existingItems = Array.isArray(d.items) && d.items.length > 0 ? d.items : (Array.isArray(d.receipt_items) ? d.receipt_items : [])
+        const fallbackItems = extractItemsFromOcrText(rawOcr)
+        const finalItems = existingItems.length > 0 ? existingItems : fallbackItems
+
         const cleanedData = {
           ...d,
           merchantName: d.nama_toko || d.namaToko || d.merchantName || 'Nota Belanja',
@@ -74,7 +79,8 @@ export function DetailView() {
           nominal: Number(d.nominal ?? d.total ?? 0),
           description: d.keterangan || d.description || '',
           keterangan: d.keterangan || d.description || '',
-          ocrText: d.ocr_raw_text || d.ocrRawText || d.ocrText || '',
+          ocrText: rawOcr,
+          items: finalItems,
         }
         setReceipt(cleanedData)
         setEditForm(cleanedData)
@@ -1010,20 +1016,28 @@ function parseDataRow(line: string, headerCols: string[]): string[] {
     trimmed = trimmed.slice(0, trimmed.length - unitPriceMatch[0].length).trim()
   }
 
-  // Extract Quantity from the beginning (e.g. "32 paket", "1", "1 3 x 1.5", "2 pcs")
+  // Extract Quantity from the beginning: ONLY match numeric or numeric + standard measurement unit
   let qtyStr = '1'
   let nameStr = trimmed
 
-  const qtyMatch = trimmed.match(/^(\d+(?:\s*[xX*]\s*[\d.]+|\s+[a-zA-Z]+)?)\s+(.+)$/i)
-  if (qtyMatch) {
+  // Match leading number, optionally followed by standard unit (pcs, pack, kg, gr, btl, bks, porsi, ltr, box, x)
+  const qtyMatch = trimmed.match(/^(\d+(?:\s*(?:[xX*]|pcs|pack|kg|gr|btl|bks|porsi|ltr|box|stk|lsn))\b)\s*(.+)$/i)
+  if (qtyMatch && qtyMatch[1]) {
     qtyStr = qtyMatch[1].trim()
     nameStr = qtyMatch[2].trim()
-  } else if (/^\d+$/.test(trimmed)) {
-    qtyStr = trimmed
-    nameStr = ''
+  } else {
+    // Check if line simply starts with a number followed by space (e.g. "4 Nasi Paket ayam")
+    const simpleNumMatch = trimmed.match(/^(\d+)\s+(.+)$/)
+    if (simpleNumMatch) {
+      qtyStr = simpleNumMatch[1].trim()
+      nameStr = simpleNumMatch[2].trim()
+    } else if (/^\d+$/.test(trimmed)) {
+      qtyStr = trimmed
+      nameStr = ''
+    }
   }
 
-  return [qtyStr, nameStr, priceStr]
+  return [qtyStr, nameStr, priceStr || unitPriceStr]
 }
 
 interface TableBlock {
@@ -1066,6 +1080,10 @@ function formatOcrRawTextToStructuredLines(text: string): string[] {
   if (!text) return []
 
   let normalized = String(text || '').replace(/\\n/g, '\n').replace(/\r/g, '').trim()
+
+  // Split lines that have multiple items joined together on one line (e.g. "160.000 4 Air mineral 180.000")
+  normalized = normalized.replace(/([\d.,]{3,})\s+(\d+\s+[A-Za-z])/g, '$1\n$2')
+
   let rawLines = normalized.split('\n').map((l) => l.trim()).filter(Boolean)
 
   if (rawLines.length === 1 && rawLines[0].includes(' | ')) {
@@ -1501,13 +1519,23 @@ export function OcrTableEditor({
 }
 
 function extractItemsFromOcrText(ocrText: string): any[] {
-  const rawLines = ocrText.split('\n')
+  if (!ocrText) return []
+
+  // Ensure lines concatenated on a single line are formatted
+  const formattedLines = formatOcrRawTextToStructuredLines(ocrText)
+  const items: any[] = []
+  
+  const invalidNames = new Set([
+    'BANYAKNYA', 'NAMA BARANG', 'HARGA', 'TOTAL', 'SUBTOTAL', 'GRAND TOTAL',
+    'QTY', 'ITEM', 'JUMLAH', 'BAYAR', 'KEMBALI', 'KASIR', 'TANGGAL', 'NOTA',
+    'TANDA TERIMA', 'HORMAT KAMI', 'TERIMA KASIH'
+  ])
+
   let i = 0
-  while (i < rawLines.length) {
-    const line = rawLines[i].trim()
+  while (i < formattedLines.length) {
+    const line = formattedLines[i].trim()
     if (isTableHeaderLine(line)) {
       const headers = parseHeaderCols(line)
-      const items: any[] = []
       i++
       
       const qtyIdx = headers.findIndex((h) => /banyaknya|qty|jumlah/i.test(h))
@@ -1515,12 +1543,12 @@ function extractItemsFromOcrText(ocrText: string): any[] {
       const priceIdx = headers.findIndex((h) => /harga|satuan/i.test(h))
       const totalIdx = headers.findIndex((h) => /jumlah|total|nominal|subtotal/i.test(h) && h !== headers[qtyIdx])
       
-      while (i < rawLines.length) {
-        let dataLine = rawLines[i].trim()
+      while (i < formattedLines.length) {
+        let dataLine = formattedLines[i].trim()
         if (!dataLine || isSeparatorLine(dataLine) || isTableHeaderLine(dataLine) || isTotalLine(dataLine) || /^(tanda|hormat)/i.test(dataLine)) break
 
-        while (i + 1 < rawLines.length) {
-          const nextLine = rawLines[i + 1].trim()
+        while (i + 1 < formattedLines.length) {
+          const nextLine = formattedLines[i + 1].trim()
           if (!nextLine || isTableHeaderLine(nextLine) || isTotalLine(nextLine) || /^(tanda|hormat)/i.test(nextLine)) break
 
           const currentHasPrice = /[\d.,]{3,}\s*$/.test(dataLine)
@@ -1540,7 +1568,7 @@ function extractItemsFromOcrText(ocrText: string): any[] {
           const priceStr = priceIdx !== -1 ? parsedRow[priceIdx] || '' : ''
           const totalStr = totalIdx !== -1 ? parsedRow[totalIdx] || '' : ''
           
-          const qty = parseInt(qtyStr.replace(/[^\d]/g, '')) || 1
+          const qty = parseInt(qtyStr.replace(/[^\d]/g, ''), 10) || 1
           let priceVal = parseFloat(priceStr.replace(/[^\d.-]/g, '').replace(/[^0-9-]/g, '')) || 0
           let totalVal = parseFloat(totalStr.replace(/[^\d.-]/g, '').replace(/[^0-9-]/g, '')) || 0
           
@@ -1551,11 +1579,14 @@ function extractItemsFromOcrText(ocrText: string): any[] {
             totalVal = qty * priceVal
           }
           
-          if (nameStr) {
+          if (nameStr && !invalidNames.has(nameStr.toUpperCase())) {
             items.push({
+              namaBarang: nameStr,
               name: nameStr,
               qty: qty,
+              harga: priceVal,
               price: priceVal,
+              subtotal: totalVal,
               total: totalVal,
             })
           }
@@ -1570,5 +1601,39 @@ function extractItemsFromOcrText(ocrText: string): any[] {
     }
     i++
   }
-  return []
+
+  // Fallback: line-by-line item extraction if no explicit table header found
+  const lines = formattedLines.map((l) => l.trim()).filter(Boolean)
+  let urutan = 0
+  for (const line of lines) {
+    if (invalidNames.has(line.toUpperCase()) || /^(tanda|hormat|terima|total|subtotal|jumlah|bayar|kembali)/i.test(line)) {
+      continue
+    }
+
+    // Line pattern: "4 Nasi Paket ayam 40.000 160.000" or "4 Air mineral 180.000"
+    const m = line.match(/^(\d+)\s+(.+?)\s+([\d.]+)(?:\s+([\d.]+))?$/)
+    if (m) {
+      const qty = parseInt(m[1], 10)
+      const namaBarang = m[2].trim()
+      const val1 = parseFloat(m[3].replace(/\./g, ''))
+      const val2 = m[4] ? parseFloat(m[4].replace(/\./g, '')) : null
+
+      if (namaBarang && !invalidNames.has(namaBarang.toUpperCase()) && !isNaN(val1) && val1 > 0) {
+        const subtotal = val2 !== null ? val2 : val1
+        const harga = val2 !== null ? val1 : Math.round(subtotal / qty)
+        items.push({
+          namaBarang,
+          name: namaBarang,
+          qty,
+          harga,
+          price: harga,
+          subtotal,
+          total: subtotal,
+          urutan: urutan++,
+        })
+      }
+    }
+  }
+
+  return items
 }

@@ -29,7 +29,6 @@ export function useReceipts(workspaceId?: string | null) {
   const queryClient = useQueryClient()
   const {
     searchQuery,
-    kategori,
     receiptType,
     statusOcr,
     startDate,
@@ -82,7 +81,6 @@ export function useReceipts(workspaceId?: string | null) {
       workspaceId,
       {
         searchQuery,
-        kategori,
         receiptType,
         statusOcr,
         startDate,
@@ -98,7 +96,6 @@ export function useReceipts(workspaceId?: string | null) {
       if (!workspaceId) throw new Error('workspaceId diperlukan')
       return await receiptService.getReceipts(workspaceId, {
         q: searchQuery,
-        kategori,
         receiptType,
         statusOcr,
         startDate,

@@ -36,7 +36,6 @@ import type { Receipt, ReceiptItem, OcrResult, StatusOcr, ReceiptType } from '..
 
 export interface ReceiptFilterOptions {
   q?: string                          // Search query (nama_toko, receipt_number, keterangan)
-  kategori?: string | null
   receiptType?: ReceiptType | null
   statusOcr?: StatusOcr | null
   startDate?: string | null           // "YYYY-MM-DD"
@@ -166,7 +165,6 @@ export const receiptService = {
   ): Promise<ReceiptListResponse> {
     const {
       q = '',
-      kategori = null,
       receiptType = null,
       statusOcr = null,
       startDate = null,
@@ -187,7 +185,6 @@ export const receiptService = {
         sort,
       })
       if (q) params.set('q', q)
-      if (kategori) params.set('kategori', kategori)
       if (receiptType) params.set('receiptType', receiptType)
       if (statusOcr) params.set('statusOcr', statusOcr)
       if (startDate) params.set('startDate', startDate)
@@ -226,7 +223,6 @@ export const receiptService = {
         const searchTerm = q.trim()
         query = query.or(`nama_toko.ilike.%${searchTerm}%,receipt_number.ilike.%${searchTerm}%,keterangan.ilike.%${searchTerm}%`)
       }
-      if (kategori) query = query.eq('kategori', kategori)
       if (receiptType) query = query.eq('receipt_type', receiptType)
       if (statusOcr) query = query.eq('status_ocr', statusOcr)
       if (hasImage) query = query.not('image_url', 'is', null)
@@ -315,7 +311,6 @@ export const receiptService = {
         imageUrl: r.imageUrl ?? null,
         tanggal: r.tanggal,
         namaToko: r.namaToko,
-        kategori: r.kategori ?? null,
         nominal: r.nominal,
         diskon: r.diskon ?? 0,
         pajak: r.pajak ?? 0,
@@ -412,7 +407,6 @@ export const receiptService = {
         imageUrl: local.imageUrl,
         tanggal: local.tanggal,
         namaToko: local.namaToko,
-        kategori: local.kategori,
         nominal: local.nominal,
         diskon: local.diskon,
         pajak: local.pajak,
@@ -459,7 +453,6 @@ export const receiptService = {
       imageUrl?: string | null
       tanggal?: string
       namaToko: string
-      kategori?: string | null
       diskon?: number
       pajak?: number
       metodePembayaran?: string | null
@@ -502,7 +495,6 @@ export const receiptService = {
       image_url: data.imageUrl || null,
       tanggal,
       nama_toko: namaToko,
-      kategori: data.kategori || null,
       nominal: totalNominal,
       diskon,
       pajak,
@@ -577,7 +569,6 @@ export const receiptService = {
         localImageId: null,
         tanggal: receiptObj.tanggal,
         namaToko: receiptObj.namaToko,
-        kategori: receiptObj.kategori,
         nominal: receiptObj.nominal,
         diskon: receiptObj.diskon,
         pajak: receiptObj.pajak,
@@ -611,7 +602,6 @@ export const receiptService = {
         imageUrl: data.imageUrl || null,
         tanggal,
         namaToko,
-        kategori: data.kategori || null,
         nominal: totalNominal,
         diskon,
         pajak,
@@ -644,7 +634,6 @@ export const receiptService = {
         localImageId: null,
         tanggal,
         namaToko,
-        kategori: data.kategori || null,
         nominal: totalNominal,
         diskon,
         pajak,
@@ -708,7 +697,6 @@ export const receiptService = {
     if (patch.receiptNumber !== undefined) updatePayload.receipt_number = patch.receiptNumber
     if (patch.namaToko !== undefined) updatePayload.nama_toko = patch.namaToko
     if (patch.tanggal !== undefined) updatePayload.tanggal = patch.tanggal
-    if (patch.kategori !== undefined) updatePayload.kategori = patch.kategori
     if (patch.metodePembayaran !== undefined) updatePayload.metode_pembayaran = patch.metodePembayaran
     if (patch.keterangan !== undefined) updatePayload.keterangan = patch.keterangan
     if (patch.imageUrl !== undefined) updatePayload.image_url = patch.imageUrl
@@ -799,7 +787,6 @@ export const receiptService = {
         localImageId: null,
         tanggal: updatedObj.tanggal,
         namaToko: updatedObj.namaToko,
-        kategori: updatedObj.kategori,
         nominal: updatedObj.nominal,
         diskon: updatedObj.diskon,
         pajak: updatedObj.pajak,
@@ -843,7 +830,6 @@ export const receiptService = {
         localImageId: null,
         tanggal: patch.tanggal || existing.tanggal,
         namaToko: patch.namaToko || existing.namaToko,
-        kategori: patch.kategori ?? existing.kategori,
         nominal: totalNominal,
         diskon,
         pajak,

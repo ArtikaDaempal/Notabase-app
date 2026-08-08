@@ -192,24 +192,107 @@ function parseInvoice(text: string): string | null {
 
 function parseItems(text: string): ReceiptItem[] {
   const items: ReceiptItem[] = []
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+  if (!text) return items
+
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   let urutan = 0
+
+  const invalidNames = new Set([
+    'BANYAKNYA', 'NAMA BARANG', 'HARGA', 'TOTAL', 'SUBTOTAL', 'GRAND TOTAL',
+    'QTY', 'ITEM', 'JUMLAH', 'BAYAR', 'KEMBALI', 'KASIR', 'TANGGAL', 'NOTA',
+    'TANDA TERIMA', 'HORMAT KAMI', 'TERIMA KASIH'
+  ])
+
   for (const line of lines) {
-    const m = line.match(/^(.+?)\s+(\d+)\s*[xX]\s*([\d.]+)\s+([\d.]+)$/)
+    const upper = line.toUpperCase()
+    if (invalidNames.has(upper) || /^(tanda|hormat|terima|total|subtotal|jumlah|bayar|kembali|cash|change)/i.test(line)) {
+      continue
+    }
+
+    // Pattern 1: Qty ItemName UnitPrice Subtotal (e.g. "4 Nasi Paket ayam 40.000 160.000" or "4 Nasi 10.000 40.000")
+    let m = line.match(/^(\d+)\s+(.+?)\s+([\d.]+)\s+([\d.]+)$/)
     if (m) {
+      const qty = parseInt(m[1], 10)
+      const namaBarang = m[2].trim()
       const harga = parseFloat(m[3].replace(/\./g, ''))
+      const subtotal = parseFloat(m[4].replace(/\./g, ''))
+      if (namaBarang && !invalidNames.has(namaBarang.toUpperCase()) && !isNaN(harga)) {
+        items.push({
+          namaBarang,
+          qty,
+          harga,
+          subtotal: isNaN(subtotal) || subtotal === 0 ? qty * harga : subtotal,
+          urutan: urutan++,
+          name: namaBarang,
+          price: harga,
+          total: isNaN(subtotal) || subtotal === 0 ? qty * harga : subtotal,
+        })
+        continue
+      }
+    }
+
+    // Pattern 2: ItemName Qty x UnitPrice Subtotal (e.g. "Nasi Paket Ayam 4 x 40.000 160.000")
+    m = line.match(/^(.+?)\s+(\d+)\s*[xX@]\s*([\d.]+)(?:\s+([\d.]+))?$/)
+    if (m) {
+      const namaBarang = m[1].trim()
       const qty = parseInt(m[2], 10)
-      items.push({
-        namaBarang: m[1].trim(),
-        qty,
-        harga,
-        subtotal: qty * harga,
-        urutan: urutan++,
-        // deprecated aliases for components not yet updated
-        name: m[1].trim(),
-        price: harga,
-        total: qty * harga,
-      })
+      const harga = parseFloat(m[3].replace(/\./g, ''))
+      const subtotal = m[4] ? parseFloat(m[4].replace(/\./g, '')) : qty * harga
+      if (namaBarang && !invalidNames.has(namaBarang.toUpperCase()) && !isNaN(harga)) {
+        items.push({
+          namaBarang,
+          qty,
+          harga,
+          subtotal,
+          urutan: urutan++,
+          name: namaBarang,
+          price: harga,
+          total: subtotal,
+        })
+        continue
+      }
+    }
+
+    // Pattern 3: Qty ItemName TotalPrice (e.g. "4 Air mineral 180.000" or "1 Paket Ayam 40.000")
+    m = line.match(/^(\d+)\s+(.+?)\s+([\d.]{3,})$/)
+    if (m) {
+      const qty = parseInt(m[1], 10)
+      const namaBarang = m[2].trim()
+      const subtotal = parseFloat(m[3].replace(/\./g, ''))
+      if (namaBarang && !invalidNames.has(namaBarang.toUpperCase()) && !isNaN(subtotal) && subtotal >= 100) {
+        const harga = Math.round(subtotal / qty)
+        items.push({
+          namaBarang,
+          qty,
+          harga,
+          subtotal,
+          urutan: urutan++,
+          name: namaBarang,
+          price: harga,
+          total: subtotal,
+        })
+        continue
+      }
+    }
+
+    // Pattern 4: ItemName TotalPrice (Qty implied 1) (e.g. "Air mineral 180.000")
+    m = line.match(/^([A-Za-z0-9\s/.-]{2,50})\s+([\d.]{3,})$/)
+    if (m) {
+      const namaBarang = m[1].trim()
+      const subtotal = parseFloat(m[2].replace(/\./g, ''))
+      if (namaBarang && !invalidNames.has(namaBarang.toUpperCase()) && !isNaN(subtotal) && subtotal >= 500 && !/^(total|subtotal|jumlah|bayar|kembali|cash|dp|pajak|diskon)/i.test(namaBarang)) {
+        items.push({
+          namaBarang,
+          qty: 1,
+          harga: subtotal,
+          subtotal,
+          urutan: urutan++,
+          name: namaBarang,
+          price: subtotal,
+          total: subtotal,
+        })
+        continue
+      }
     }
   }
   return items
@@ -307,23 +390,37 @@ Tugas:
 
 {
   "isReceipt": true,
-  "namaToko": "WAJIB diisi. Nama merchant/toko/mitra/penyedia jasa (misal: 'PDAM Kota Manado - Bukalapak', 'BALAI P.P.K.I MANADO', 'Tokopedia', 'Livin by Mandiri'). Untuk Bukalapak/Tokopedia sebutkan nama instansi/layanan yang dibayar. JANGAN isi dengan 'Tidak Terbaca'",
+  "namaToko": "WAJIB diisi. Nama merchant/toko/mitra/penyedia jasa. JANGAN isi dengan 'Tidak Terbaca'",
+  "alamat": "Alamat toko/merchant jika tercantum, atau null",
+  "noTelepon": "Nomor telepon toko/merchant jika ada, atau null",
   "tanggal": "YYYY-MM-DD — WAJIB format ini. Contoh: 15 JUL 2026 -> 2026-07-15",
-  "nominal": "HANYA nominal total akhir pembayaran sebagai INTEGER tanpa titik/koma/Rp. Contoh: Rp 125.000 -> 125000. JANGAN masukkan nomor referensi/pelanggan sebagai nominal",
-  "diskon": 0,
-  "pajak": 0,
-  "receiptNumber": "No. Referensi / No. Transaksi / No. Pelanggan / No. Nota yang tertera",
-  "metodePembayaran": "Sebutkan metode pembayaran (misal: 'Partner Bukalapak', 'Transfer Bank Mandiri', 'GoPay', 'DANA')",
-  "keterangan": "Deskripsi singkat transaksi (misal: 'Pembayaran PDAM Kota Manado PERIODE Juni')",
+  "waktu": "Jam transaksi format HH:MM jika ada (contoh: '14:30'), atau null",
+  "nominal": "HANYA nominal total akhir pembayaran sebagai INTEGER tanpa titik/koma/Rp. JANGAN masukkan nomor referensi sebagai nominal",
+  "diskon": "Nominal diskon dalam Rupiah sebagai INTEGER (0 jika tidak ada)",
+  "diskonPersen": "Persentase diskon (0-100) sebagai NUMBER (0 jika tidak ada)",
+  "pajak": "Nominal pajak/PPN dalam Rupiah sebagai INTEGER (0 jika tidak ada)",
+  "pajakPersen": "Persentase pajak (0-100) sebagai NUMBER (0 jika tidak ada)",
+  "biayaTambahan": "Biaya admin/transaksi/layanan tambahan dalam Rupiah sebagai INTEGER (0 jika tidak ada)",
+  "metodePembayaran": "Metode pembayaran (misal: 'Tunai', 'Transfer Bank Mandiri', 'GoPay', 'DANA')",
+  "sumberDana": "Rekening/kartu/wallet sumber dana jika tercantum, atau null",
+  "receiptNumber": "No. Referensi / No. Transaksi / No. Nota yang tertera, atau null",
+  "keterangan": "Deskripsi singkat transaksi",
   "items": ${ocrExtractItems ? `[
     {
       "namaBarang": "Nama barang/jasa/layanan yang dibayarkan",
       "qty": 1,
       "harga": 125000,
-      "subtotal": 125000
+      "subtotal": 125000,
+      "keterangan": "Catatan per-item jika ada, atau null"
     }
   ]` : `[]`},
-  "ocrRawText": "SALIN SELURUH teks dari gambar dari atas ke bawah, lengkap tanpa ada yang terlewat. JANGAN buat baris baru di tengah kalimat yang sama."
+  "fieldConfidences": {
+    "namaToko": 95,
+    "tanggal": 90,
+    "nominal": 85,
+    "items": 80
+  },
+  "ocrRawText": "SALIN SELURUH teks dari gambar dari atas ke bawah, lengkap tanpa ada yang terlewat."
 }
 
 Aturan KRITIS:
@@ -332,7 +429,8 @@ Aturan KRITIS:
 - nominal HANYA total akhir yang dibayar. JANGAN ambil nomor referensi 16-20 digit atau no pelanggan sebagai nominal
 - tanggal WAJIB format YYYY-MM-DD
 - namaToko WAJIB diisi, JANGAN kosong atau 'Tidak Terbaca'
-- Untuk screenshot Bukalapak / Tokopedia / Shopee / Livin: namaToko = nama instansi/tujuan transaksi + platform (misal: 'PDAM Kota Manado - Bukalapak')
+- fieldConfidences: berikan skor keyakinan 0-100 untuk setiap field utama yang kamu isi
+- Untuk screenshot Bukalapak / Tokopedia / Shopee / Livin: namaToko = nama instansi/tujuan transaksi + platform
 - Keluarkan HANYA JSON mentah yang valid tanpa pembungkus markdown atau backtick.`
 
   try {
@@ -541,18 +639,49 @@ Aturan KRITIS:
     if (items.length > 0) confidence += 5
     confidence = Math.min(98, confidence)
 
+    // Extract new fields
+    const waktu: string | null = typeof norm.waktu === 'string' && norm.waktu.match(/^\d{1,2}:\d{2}/) ? norm.waktu : null
+    const diskon = Number(norm.diskon) || 0
+    const diskonPersen = Number(norm.diskonpersen || norm.diskonfloat) || 0
+    const pajak = Number(norm.pajak) || 0
+    const pajakPersen = Number(norm.pajakpersen || norm.pajakfloat) || 0
+    const biayaTambahan = Number(norm.biayaditambahkan || norm.biayaditambah || norm.biayadmin || norm.biayatambahan || norm.fee) || 0
+    const sumberDana: string | null = typeof norm.sumberdana === 'string' && norm.sumberdana.trim() ? norm.sumberdana.trim() : null
+
+    // Field-level confidences from Gemini (or default heuristics)
+    const rawFc = norm.fieldconfidences || norm.field_confidences || {}
+    const fieldConfidences: Record<string, number> = {}
+    if (rawFc && typeof rawFc === 'object') {
+      for (const [k, v] of Object.entries(rawFc)) {
+        fieldConfidences[k.toLowerCase().replace(/_/g, '')] = Number(v) || 0
+      }
+    }
+    // Fill in heuristic defaults for fields not returned by Gemini
+    if (!fieldConfidences.namatoko) fieldConfidences.namatoko = namaToko !== 'Tidak Terbaca' ? 80 : 30
+    if (!fieldConfidences.tanggal) fieldConfidences.tanggal = tanggal ? 80 : 20
+    if (!fieldConfidences.nominal) fieldConfidences.nominal = nominal > 0 ? 75 : 20
+
     const result: OcrResult = {
       isReceipt,
       namaToko: detectedNamaToko,
       alamat,
       noTelepon,
       tanggal,
+      waktu,
       nominal,
+      diskon,
+      diskonPersen,
+      pajak,
+      pajakPersen,
+      biayaTambahan,
+      metodePembayaran,
+      sumberDana,
       receiptNumber,
       keterangan,
       items,
       ocrRawText,
       confidence,
+      fieldConfidences,
       status: getOcrStatus(confidence),
       // backward compat aliases
       merchantName: detectedNamaToko,
@@ -564,8 +693,6 @@ Aturan KRITIS:
       invoiceNumber: receiptNumber,
       description: keterangan,
       ocrText: ocrRawText,
-      // extra fields exposed for consumers
-      ...(metodePembayaran ? { metodePembayaran } : {}),
     }
 
     return NextResponse.json(result)

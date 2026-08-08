@@ -15,7 +15,6 @@ import {
   FileText,
   ZoomIn,
   WifiOff,
-  Tag,
   Trash2,
   Calendar,
   ChevronRight,
@@ -42,16 +41,6 @@ const SOURCE_BADGE: Record<
   manual: { label: 'Manual', icon: FileText, color: 'bg-slate-600 text-white' },
 }
 
-const KATEGORI_TAG_COLOR: Record<string, string> = {
-  ATK: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-  Konsumsi: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
-  Operasional: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
-  Transportasi: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
-  Utilitas: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
-  Referensi: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300',
-  Lainnya: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400',
-}
-
 export function ReceiptCard({
   receipt,
   index = 0,
@@ -65,14 +54,10 @@ export function ReceiptCard({
   const receiptNumber = isValidInvoiceNumber(rawInv) ? rawInv : ''
   const dateStr = receipt.tanggal || receipt.transactionDate
   const totalAmount = receipt.nominal ?? receipt.total ?? 0
-  const kategori = receipt.kategori || 'Lainnya'
 
   const sourceKey = (receipt.receiptType ?? 'scan') as keyof typeof SOURCE_BADGE
   const source = SOURCE_BADGE[sourceKey] ?? SOURCE_BADGE.scan
   const SourceIcon = source.icon
-
-  const tagColorStyle =
-    KATEGORI_TAG_COLOR[kategori] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
 
   if (layoutMode === 'list') {
     return (

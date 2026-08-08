@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ScanLine,
   ImagePlus,
@@ -12,6 +12,9 @@ import {
   CheckCircle2,
   Bell,
   ArrowLeft,
+  AlertTriangle,
+  FileText,
+  Sparkles,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
@@ -32,8 +35,16 @@ import { cn } from '@/lib/utils'
 import { saveReceiptOnlineFirst } from '@/lib/sync-service'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/constants'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
+import { preprocessForOcr } from '@/lib/image-preprocessor'
+import type { PreprocessResult } from '@/lib/image-preprocessor'
 
-type Phase = 'preview' | 'captured' | 'processing' | 'done'
+type Phase = 'preview' | 'captured' | 'preprocessing' | 'processing' | 'done'
+
+const PROGRESS_STEPS = [
+  { key: 'preprocessing', label: 'Memproses gambar...', icon: Sparkles },
+  { key: 'uploading', label: 'Mengunggah gambar...', icon: Camera },
+  { key: 'ocr', label: 'Menjalankan OCR AI...', icon: ScanLine },
+]
 
 export function ScanView() {
   const { startOcrReview, setTab, goBack } = useAppStore()
@@ -44,7 +55,10 @@ export function ScanView() {
 
   const [phase, setPhase] = useState<Phase>('preview')
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  const [processedImage, setProcessedImage] = useState<string | null>(null) // after preprocessing
   const [capturedFile, setCapturedFile] = useState<File | null>(null)
+  const [preprocessResult, setPreprocessResult] = useState<PreprocessResult | null>(null)
+  const [progressStep, setProgressStep] = useState<string>('preprocessing')
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [resolution, setResolution] = useState('1280x720')
@@ -182,39 +196,79 @@ export function ScanView() {
     )
   }, [stopCamera])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast.error('File harus berupa gambar')
+
+    const isPdf = file.type === 'application/pdf'
+    const isImage = file.type.startsWith('image/')
+    if (!isPdf && !isImage) {
+      toast.error('File harus berupa gambar (JPG, PNG) atau PDF')
       return
     }
     stopCamera()
     const url = URL.createObjectURL(file)
-    setCapturedImage(url)
+    // Show original preview immediately
+    setCapturedImage(isPdf ? null : url)
     setCapturedFile(file)
     setPhase('captured')
+    // Reset processed image
+    setProcessedImage(null)
+    setPreprocessResult(null)
+    // Reset input so same file can be re-selected
+    e.target.value = ''
   }
 
   const retake = useCallback(() => {
     setCapturedImage(null)
+    setProcessedImage(null)
+    setPreprocessResult(null)
     setCapturedFile(null)
+    setProgressStep('preprocessing')
     setPhase('preview')
   }, [])
 
   const runOcr = useCallback(async () => {
-    if (!capturedFile || !capturedImage) return
-    setPhase('processing')
+    if (!capturedFile) return
+    setPhase('preprocessing')
+    setProgressStep('preprocessing')
+
+    let fileToUpload: File = capturedFile
+    let previewUrl = capturedImage
 
     try {
-      // Upload the image first
+      // ── Step 1: Pre-process image ──────────────────────────────────────────
+      const prep = await preprocessForOcr(capturedFile)
+      setPreprocessResult(prep)
+      setProcessedImage(prep.dataUrl)
+      previewUrl = prep.dataUrl
+
+      // Quality gate: warn but don't block
+      if (!prep.quality.isAcceptable) {
+        toast.warning(
+          prep.quality.feedback +
+          (prep.quality.suggestions.length ? ` Saran: ${prep.quality.suggestions[0]}` : ''),
+          { duration: 5000 }
+        )
+      } else if (prep.quality.score < 70) {
+        toast.info(prep.quality.feedback, { duration: 3000 })
+      }
+
+      // Convert processed dataUrl back to File for upload
+      const res = await fetch(prep.dataUrl)
+      const processedBlob = await res.blob()
+      fileToUpload = new File([processedBlob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' })
+
+      // ── Step 2: Upload ─────────────────────────────────────────────────────
+      setProgressStep('uploading')
       const formData = new FormData()
-      formData.append('file', capturedFile)
+      formData.append('file', fileToUpload)
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
       if (!uploadRes.ok) throw new Error('Upload gagal')
       const { url } = await uploadRes.json()
 
-      // Run OCR
+      // ── Step 3: OCR ────────────────────────────────────────────────────────
+      setProgressStep('ocr')
       const ocrRes = await fetch('/api/ocr', {
         method: 'POST',
         headers: {
@@ -236,15 +290,15 @@ export function ScanView() {
         return
       }
 
-      // Smart auto-save: if all required fields are detected, save directly without showing form
+      // Smart auto-save: if all required fields are detected, save directly
       const isFullyRead =
-        result.merchantName && result.merchantName.trim() !== '' &&
-        result.total && result.total > 0 &&
-        result.transactionDate && result.transactionDate.trim() !== ''
+        result.namaToko && result.namaToko.trim() !== '' &&
+        result.nominal && result.nominal > 0 &&
+        result.tanggal && result.tanggal.trim() !== ''
 
       if (isFullyRead) {
-        const dateStr = result.transactionDate
-          ? new Date(result.transactionDate).toISOString().slice(0, 10)
+        const dateStr = result.tanggal
+          ? new Date(result.tanggal).toISOString().slice(0, 10)
           : new Date().toISOString().slice(0, 10)
 
         const workspaceId = SINGLE_TENANT_WORKSPACE.id
@@ -252,17 +306,24 @@ export function ScanView() {
           {
             workspaceId,
             invoiceNumber: result.invoiceNumber || null,
-            merchantName: result.merchantName,
-            namaToko: result.merchantName,
+            receiptNumber: result.receiptNumber || null,
+            merchantName: result.namaToko,
+            namaToko: result.namaToko,
             transactionDate: dateStr,
             tanggal: dateStr,
-            total: result.total,
-            nominal: result.total,
-            description: result.description || null,
-            keterangan: result.description || null,
+            waktu: result.waktu || null,
+            total: result.nominal,
+            nominal: result.nominal,
+            diskon: result.diskon || 0,
+            pajak: result.pajak || 0,
+            biayaTambahan: result.biayaTambahan || 0,
+            metodePembayaran: result.metodePembayaran || null,
+            sumberDana: result.sumberDana || null,
+            description: result.keterangan || null,
+            keterangan: result.keterangan || null,
             imageUrl: url,
-            ocrText: result.ocrText,
-            ocrRawText: result.ocrText,
+            ocrText: result.ocrRawText,
+            ocrRawText: result.ocrRawText,
             confidence: result.confidence,
             ocrConfidence: result.confidence,
             status: 'verified',
@@ -280,16 +341,13 @@ export function ScanView() {
 
         toast.success('Berhasil')
         setPhase('done')
-        setTimeout(() => {
-          setTab('history')
-        }, 600)
+        setTimeout(() => { setTab('history') }, 600)
         return
       } else {
-        // Partial read: notify user fields are incomplete
         toast.info('Beberapa data nota tidak terbaca. Silakan lengkapi form di bawah.')
       }
 
-      // Fallback: show manual review form
+      // Fallback: show manual review form with the processed image URL
       setPhase('done')
       setTimeout(() => {
         startOcrReview(url, result)
@@ -299,7 +357,7 @@ export function ScanView() {
       toast.error(err.message || 'Gagal memproses OCR. Silakan coba lagi.')
       setPhase('captured')
     }
-  }, [capturedFile, capturedImage, startOcrReview, setTab])
+  }, [capturedFile, capturedImage, startOcrReview, setTab, retake])
 
   const handleLeftAction = () => {
     if (phase === 'preview') {
@@ -441,21 +499,53 @@ export function ScanView() {
               </div>
             )}
 
-            {/* Processing overlay */}
-            {phase === 'processing' && capturedImage && (
+            {/* Processing/Preprocessing overlay */}
+            {(phase === 'preprocessing' || phase === 'processing') && (
               <div className="absolute inset-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={capturedImage}
+                  src={processedImage || capturedImage || undefined}
                   alt="Processing"
-                  className="h-full w-full object-cover opacity-50"
+                  className="h-full w-full object-cover opacity-30"
                 />
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/70 backdrop-blur-sm">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                  <div className="text-center">
-                    <p className="text-xs font-semibold text-white">Memproses OCR...</p>
-                    <p className="text-[10px] text-white/60">Mengekstrak data dari nota</p>
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-900/80 backdrop-blur-sm px-6">
+                  <div className="relative">
+                    <div className="h-14 w-14 rounded-full bg-blue-600/20 flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+                    </div>
                   </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-xs font-bold text-white">
+                      {PROGRESS_STEPS.find(s => s.key === progressStep)?.label ?? 'Memproses...'}
+                    </p>
+                    <p className="text-[10px] text-white/50">Harap tunggu sebentar</p>
+                  </div>
+                  {/* Step indicators */}
+                  <div className="flex items-center gap-2">
+                    {PROGRESS_STEPS.map((step, idx) => {
+                      const currentIdx = PROGRESS_STEPS.findIndex(s => s.key === progressStep)
+                      const isDone = idx < currentIdx
+                      const isCurrent = idx === currentIdx
+                      return (
+                        <div key={step.key} className="flex items-center gap-1">
+                          <div className={cn(
+                            'h-2 w-2 rounded-full transition-all',
+                            isDone ? 'bg-emerald-400' : isCurrent ? 'bg-blue-400 animate-pulse' : 'bg-white/20'
+                          )} />
+                          {idx < PROGRESS_STEPS.length - 1 && (
+                            <div className={cn('h-px w-4', isDone ? 'bg-emerald-400' : 'bg-white/20')} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {/* Quality warning if available */}
+                  {preprocessResult && !preprocessResult.quality.isAcceptable && (
+                    <div className="flex items-center gap-1.5 rounded-xl bg-amber-500/20 border border-amber-500/30 px-3 py-2 text-[10px] text-amber-300">
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <span>{preprocessResult.quality.suggestions[0] || 'Kualitas gambar rendah'}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -501,8 +591,8 @@ export function ScanView() {
             ) : (
               <button
                 onClick={runOcr}
-                disabled={phase === 'processing' || phase === 'done'}
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-600 text-white shadow-md transition-all hover:bg-blue-700 active:scale-90"
+                disabled={phase === 'preprocessing' || phase === 'processing' || phase === 'done'}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-600 text-white shadow-md transition-all hover:bg-blue-700 active:scale-90 disabled:opacity-50"
                 aria-label="Proses OCR"
               >
                 <ScanLine className="h-6 w-6" />
@@ -642,8 +732,7 @@ export function ScanView() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
-        capture="environment"
+        accept="image/*,application/pdf"
         className="hidden"
         onChange={handleFileSelect}
       />

@@ -275,5 +275,57 @@
     "merchantAddress": null,
     "noTelepon": null,
     "merchantPhone": null
+  },
+  {
+    "id": "89f0b6ba-81b5-43e5-bea0-708f48ca8b39",
+    "workspaceId": "00000000-0000-4000-a000-000000000000",
+    "deviceId": null,
+    "receiptNumber": "",
+    "receiptType": "scan",
+    "receiptTemplate": null,
+    "imageUrl": "https://miqhmbzccnhhlsfzetnk.supabase.co/storage/v1/object/public/receipts/8f3778bc-86db-42ea-894b-b5d9c140ab84.png",
+    "tanggal": "2026-06-24",
+    "namaToko": "RM - GRANAT",
+    "kategori": "Lainnya",
+    "nominal": 232000,
+    "diskon": 0,
+    "pajak": 0,
+    "metodePembayaran": null,
+    "keterangan": "Pembelian Nasi Paket ayam dan Air mineral di RM - GRANAT",
+    "statusOcr": "berhasil",
+    "ocrConfidence": 95,
+    "ocrRawText": "24 Juni 2026\nTuan / Toko: RM - GRANAT\nNOTA NO. ............\nBANYAKNYA | NAMA BARANG | HARGA\n4 | Nasi Paket ayam | 160.000\n4 | Air mineral 5000 20.000 Jumlah Rp. | 20.000\nTanda Terima\nHormat kami, MARYANTI STAMP: BAKSO GRANAT MAS UNTUNG TIDORE",
+    "isDeleted": false,
+    "deletedAt": null,
+    "createdAt": "2026-08-04T05:39:07.615773+00:00",
+    "updatedAt": "2026-08-04T05:57:14.751Z",
+    "items": [
+      {
+        "namaBarang": "Nasi Paket ayam",
+        "name": "Nasi Paket ayam",
+        "qty": 4,
+        "harga": 160000,
+        "price": 160000,
+        "subtotal": 640000,
+        "total": 640000
+      },
+      {
+        "namaBarang": "Air mineral 5000 20.000 Jumlah Rp.",
+        "name": "Air mineral 5000 20.000 Jumlah Rp.",
+        "qty": 4,
+        "harga": 20000,
+        "price": 20000,
+        "subtotal": 80000,
+        "total": 80000
+      }
+    ],
+    "merchantName": "RM - GRANAT",
+    "invoiceNumber": "",
+    "transactionDate": "2026-06-24",
+    "total": 232000,
+    "status": "berhasil",
+    "description": "Pembelian Nasi Paket ayam dan Air mineral di RM - GRANAT",
+    "ocrText": "24 Juni 2026\nTuan / Toko: RM - GRANAT\nNOTA NO. ............\nBANYAKNYA | NAMA BARANG | HARGA\n4 | Nasi Paket ayam | 160.000\n4 | Air mineral 5000 20.000 Jumlah Rp. | 20.000\nTanda Terima\nHormat kami, MARYANTI STAMP: BAKSO GRANAT MAS UNTUNG TIDORE",
+    "confidence": 95
   }
 ]

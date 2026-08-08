@@ -97,7 +97,6 @@ export async function PUT(
   if (body.nominal !== undefined) updateData.nominal = Number(body.nominal)
   if (body.diskon !== undefined) updateData.diskon = Number(body.diskon)
   if (body.pajak !== undefined) updateData.pajak = Number(body.pajak)
-  if (body.kategori !== undefined) updateData.kategori = body.kategori
   if (body.metodePembayaran !== undefined) updateData.metode_pembayaran = body.metodePembayaran
   if (body.keterangan !== undefined) updateData.keterangan = body.keterangan
   if (body.imageUrl !== undefined) updateData.image_url = body.imageUrl
@@ -129,14 +128,20 @@ export async function PUT(
       if (body.items !== undefined && Array.isArray(body.items)) {
         await client.from('receipt_items').delete().eq('receipt_id', id)
         if (body.items.length > 0) {
-          const itemsToInsert = body.items.map((item: any, idx: number) => ({
-            receipt_id: id,
-            nama_barang: item.namaBarang ?? item.name ?? '',
-            qty: item.qty ?? 1,
-            harga: item.harga ?? item.price ?? 0,
-            urutan: item.urutan ?? idx,
-          }))
-          await client.from('receipt_items').insert(itemsToInsert)
+          const itemsToInsert = body.items.map((item: any, idx: number) => {
+            const qty = Number(item.qty) || 1
+            const harga = Number(item.harga ?? item.price) || 0
+            const subtotal = Number(item.subtotal ?? item.total) || (qty * harga)
+            return {
+              receipt_id: id,
+              nama_barang: item.namaBarang ?? item.name ?? '',
+              qty,
+              harga,
+              subtotal,
+              urutan: item.urutan ?? idx,
+            }
+          })
+          await client.from('receipt_items').insert(itemsToInsert as any)
         }
       }
     }

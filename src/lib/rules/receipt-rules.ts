@@ -8,24 +8,6 @@
 import type { ReceiptItem } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Kategori Nota (BR §8)
-// Tipe TEXT di DB (bukan enum kaku) agar mudah ditambah tanpa migrasi.
-// UI menyediakan dropdown dari daftar ini + opsi "Tambah kategori baru".
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const KATEGORI_LIST: readonly string[] = [
-  'ATK & Kantor',
-  'Operasional',
-  'Konsumsi',
-  'Transportasi',
-  'Utilitas',
-  'Referensi/Cetak',
-  'Lain-lain',
-] as const
-
-export type KategoriDefault = typeof KATEGORI_LIST[number]
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Receipt Number Generator (BR-MAN-01)
 // Format: INV-{YYYY}-{sequence_3digit}  contoh: INV-2025-051
 // sequence per workspace per tahun — dimulai dari 1 jika belum ada.

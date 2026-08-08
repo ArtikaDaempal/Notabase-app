@@ -69,7 +69,6 @@ export function ArsipDesktopPage({
   // Filter Store State
   const {
     searchQuery,
-    kategori,
     statusOcr,
     startDate,
     endDate,
@@ -77,7 +76,6 @@ export function ArsipDesktopPage({
     page,
     pageSize,
     setSearchQuery,
-    setKategori,
     setStatusOcr,
     setDateRange,
     setSortBy,

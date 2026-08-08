@@ -21,6 +21,7 @@ export interface ReceiptItem {
   harga: number
   subtotal: number        // computed: qty × harga (BR-MAN-03)
   urutan: number          // display order in preview/print
+  keterangan?: string | null // catatan per-item (opsional)
 
   // ── Deprecated aliases (backward compatibility) ─────────────────────────
   /** @deprecated Gunakan `namaBarang` */
@@ -38,6 +39,7 @@ export interface LocalReceiptItem {
   harga: number
   subtotal: number
   urutan: number
+  keterangan?: string | null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,11 +65,19 @@ export interface Receipt {
 
   // Isi nota
   tanggal: string                   // "YYYY-MM-DD"
+  waktu?: string | null             // jam transaksi "HH:MM"
   namaToko: string
-  kategori: string | null           // lihat KATEGORI_LIST di receipt-rules.ts
+  alamatToko?: string | null        // alias bersih untuk alamat toko
+  noTelepon?: string | null         // nomor telepon toko
   nominal: number                   // total akhir = subtotal − diskon + pajak
   diskon: number
+  diskonNominal?: number            // diskon dalam Rupiah
+  diskonPersen?: number             // diskon dalam persen
   pajak: number
+  pajakNominal?: number             // pajak dalam Rupiah
+  pajakPersen?: number              // pajak dalam persen
+  biayaTambahan?: number            // biaya admin/transaksi tambahan
+  sumberDana?: string | null        // rekening/wallet sumber dana
   metodePembayaran: string | null
   keterangan: string | null
 
@@ -121,13 +131,20 @@ export interface LocalReceipt {
   localImageId: string | null
 
   tanggal: string
+  waktu?: string | null
   namaToko: string
   alamat?: string | null
+  alamatToko?: string | null
   noTelepon?: string | null
-  kategori: string | null
   nominal: number
   diskon: number
+  diskonNominal?: number
+  diskonPersen?: number
   pajak: number
+  pajakNominal?: number
+  pajakPersen?: number
+  biayaTambahan?: number
+  sumberDana?: string | null
   metodePembayaran: string | null
   keterangan: string | null
 
@@ -159,11 +176,21 @@ export interface OcrResult {
   alamat?: string | null
   noTelepon?: string | null
   tanggal: string | null
+  waktu?: string | null             // jam transaksi "HH:MM"
   nominal: number
+  diskon?: number                   // diskon (nominal Rp)
+  diskonPersen?: number             // diskon (%)
+  pajak?: number                    // pajak nominal Rp
+  pajakPersen?: number              // pajak (%)
+  biayaTambahan?: number            // biaya admin/transaksi
+  metodePembayaran?: string | null
+  sumberDana?: string | null        // rekening/wallet sumber dana
   keterangan: string | null
   items: ReceiptItem[]
   ocrRawText: string
   confidence: number               // 0 – 100
+  /** Per-field confidence scores 0-100. Key = nama field, value = confidence-nya. */
+  fieldConfidences?: Record<string, number>
   status: 'berhasil' | 'perlu_review' | 'gagal'
   isReceipt?: boolean
 

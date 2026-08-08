@@ -45,7 +45,6 @@ export interface LocalReceipt {
   // Isi nota
   tanggal: string                    // "YYYY-MM-DD"
   namaToko: string
-  kategori: string | null            // BR §8
   nominal: number
   diskon: number
   pajak: number
@@ -135,7 +134,6 @@ export class NotabaseDB extends Dexie {
           'workspaceId',       // index utama untuk filter per workspace
           'namaToko',
           'tanggal',
-          'kategori',
           'receiptType',
           'statusOcr',
           'isDeleted',
@@ -181,7 +179,6 @@ export class NotabaseDB extends Dexie {
           r.diskon = r.diskon ?? 0
           r.pajak = r.pajak ?? 0
           r.metodePembayaran = r.metodePembayaran ?? null
-          r.kategori = r.kategori ?? null
           r.isDeleted = r.isDeleted ?? (r.pendingDelete ?? false)
           r.deletedAt = r.deletedAt ?? null
           r.deviceId = r.deviceId ?? null
@@ -213,7 +210,6 @@ export async function getLocalReceipts(
   workspaceId: string,
   opts?: {
     q?: string
-    kategori?: string
     receiptType?: string
     statusOcr?: string
     page?: number
@@ -223,7 +219,6 @@ export async function getLocalReceipts(
 ): Promise<{ data: LocalReceipt[]; total: number }> {
   const {
     q = '',
-    kategori = '',
     receiptType = '',
     statusOcr = '',
     page = 1,
@@ -248,7 +243,6 @@ export async function getLocalReceipts(
   }
 
   // Filters (BR-SRCH-02: semua filter bersifat AND)
-  if (kategori) collection = collection.filter((r) => r.kategori === kategori)
   if (receiptType) collection = collection.filter((r) => r.receiptType === receiptType)
   if (statusOcr) collection = collection.filter((r) => r.statusOcr === statusOcr)
 

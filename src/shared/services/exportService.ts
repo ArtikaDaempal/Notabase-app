@@ -17,7 +17,6 @@ export interface ExportOptions {
   periodType?: PeriodType | 'kustom'
   startDate?: string | null  // "YYYY-MM-DD"
   endDate?: string | null    // "YYYY-MM-DD"
-  kategori?: string | null
   workspaceName?: string
   workspaceCode?: string
   includeItems?: boolean
@@ -50,7 +49,6 @@ export const exportService = {
       periodType = 'bulanan',
       startDate,
       endDate,
-      kategori,
       workspaceName = 'BPSDMP Kominfo Manado',
       workspaceCode = 'BPSDMP-MANADO',
       includeItems = true,
@@ -60,7 +58,6 @@ export const exportService = {
     const { data: receipts } = await receiptService.getReceipts(workspaceId, {
       startDate: startDate || undefined,
       endDate: endDate || undefined,
-      kategori: kategori || undefined,
       pageSize: 5000, // Fetch up to 5000 records for report
     })
 

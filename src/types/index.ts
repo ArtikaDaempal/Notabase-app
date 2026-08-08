@@ -50,7 +50,6 @@ export type AppSettingKey =
   | 'hapus_setelah_upload'
   | 'folder_simpan_default'
   | 'tema'
-  | 'kategori_custom'
   | 'nama_perangkat'
   | 'receipt_template_default'
 

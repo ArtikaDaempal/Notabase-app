@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/categories — Stubbed route since categories are removed
 export async function GET() {
   return NextResponse.json([])

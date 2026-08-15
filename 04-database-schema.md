@@ -66,8 +66,12 @@ create table receipts (
   nama_toko         text not null,
   kategori          text,                          -- lihat 03-business-rules.md §8
   nominal           numeric(14,2) not null check (nominal >= 0),
+  subtotal_nominal  numeric(14,2) default 0,
   diskon            numeric(14,2) default 0,
   pajak             numeric(14,2) default 0,
+  biaya_tambahan    numeric(14,2) default 0,
+  nama_biaya_tambahan text,
+  no_telepon        text,
   metode_pembayaran text,
   keterangan        text,
 

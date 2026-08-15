@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { getWorkspaceDb } from '@/lib/db'
 import { serializeReceipt } from '@/lib/serialize'
 import { receiptCache } from '@/lib/receipt-cache'
@@ -195,9 +197,8 @@ export async function POST(req: NextRequest) {
     const rawNumber = body.receiptNumber || body.invoiceNumber || ''
     const userInvNumber = isValidInvoiceNumber(rawNumber) ? rawNumber.trim() : ''
     const tanggal = body.tanggal || body.transactionDate?.split('T')[0] || new Date().toISOString().split('T')[0]
-    const dbReceiptNumber = userInvNumber || `INV-${tanggal.replace(/-/g, '')}-${receiptId.slice(-4).toUpperCase()}`
-
-    const namaToko = body.namaToko || body.merchantName || 'Nota Belanja'
+    const dbReceiptNumber = userInvNumber || ''
+    const namaToko = body.namaToko || body.merchantName || ''
     const nominal = Number(body.nominal ?? body.total) || 0
     const statusOcr = normalizeStatusOcr(body.statusOcr || body.status)
 
@@ -223,7 +224,6 @@ export async function POST(req: NextRequest) {
           diskon: Number(body.diskon) || 0,
           pajak: Number(body.pajak) || 0,
           keterangan: body.keterangan || body.description || null,
-          metode_pembayaran: body.metodePembayaran || null,
           image_url: body.imageUrl || null,
           ocr_raw_text: body.ocrRawText || body.ocrText || null,
           ocr_confidence: Number(body.ocrConfidence ?? body.confidence) || 85,
@@ -271,7 +271,6 @@ export async function POST(req: NextRequest) {
       pajak: Number(body.pajak) || 0,
       keterangan: body.keterangan || body.description || null,
       description: body.keterangan || body.description || null,
-      metodePembayaran: body.metodePembayaran || null,
       imageUrl: body.imageUrl || null,
       ocrRawText: body.ocrRawText || body.ocrText || null,
       ocrText: body.ocrRawText || body.ocrText || null,

@@ -8,7 +8,7 @@ export function SplashScreen() {
   const navigate = useAppStore((s) => s.navigate)
 
   useEffect(() => {
-    const t = setTimeout(() => navigate('dashboard'), 2600)
+    const t = setTimeout(() => navigate('dashboard'), 1800)
     return () => clearTimeout(t)
   }, [navigate])
 
@@ -35,7 +35,7 @@ export function SplashScreen() {
       <motion.div
         initial={{ opacity: 0, y: 18, scale: 0.92 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.7, ease: 'easeOut' }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
         className="flex flex-col items-center max-w-xs sm:max-w-md px-4"
       >
         <img
@@ -53,7 +53,7 @@ export function SplashScreen() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.8, duration: 0.4 }}
+        transition={{ delay: 0.3, duration: 0.3 }}
         className="absolute bottom-32 flex w-64 flex-col items-center gap-2"
       >
         <span className="text-xs font-medium text-slate-500">Memuat aplikasi...</span>
@@ -62,7 +62,7 @@ export function SplashScreen() {
             className="h-full rounded-full bg-blue-600"
             initial={{ width: '0%' }}
             animate={{ width: '100%' }}
-            transition={{ duration: 2, ease: 'easeInOut' }}
+            transition={{ duration: 1.4, ease: 'easeInOut' }}
           />
         </div>
       </motion.div>

@@ -180,15 +180,31 @@ function detectAndCrop(canvas: HTMLCanvasElement): { canvas: HTMLCanvasElement; 
  * - Slight sharpening using unsharp mask approximation
  */
 function enhanceForOcr(canvas: HTMLCanvasElement): HTMLCanvasElement {
-  const { width, height } = canvas
+  let width = canvas.width
+  let height = canvas.height
+
+  // Step 0: High-res Upscaling if image is small (optimal for OCR is ~1500-2400px width)
+  if (width < 1200 || height < 1200) {
+    const scaleFactor = Math.min(2.5, 1800 / Math.min(width, height))
+    if (scaleFactor > 1.1) {
+      const upscaled = createCanvas(Math.round(width * scaleFactor), Math.round(height * scaleFactor))
+      const upCtx = upscaled.getContext('2d')!
+      upCtx.imageSmoothingEnabled = true
+      upCtx.imageSmoothingQuality = 'high'
+      upCtx.drawImage(canvas, 0, 0, upscaled.width, upscaled.height)
+      canvas = upscaled
+      width = canvas.width
+      height = canvas.height
+    }
+  }
+
   const ctx = canvas.getContext('2d')!
   const imageData = ctx.getImageData(0, 0, width, height)
   const data = imageData.data
 
-  // Step 1: Convert to grayscale-weighted contrast boost
+  // Step 1: Contrast S-curve boost for faded ink & handwriting on lined paper
+  const contrast = 1.35
   for (let i = 0; i < data.length; i += 4) {
-    // Contrast S-curve: ((x/255 - 0.5) * contrast + 0.5) * 255
-    const contrast = 1.4
     for (let c = 0; c < 3; c++) {
       let val = data[i + c] / 255
       val = (val - 0.5) * contrast + 0.5
@@ -198,12 +214,11 @@ function enhanceForOcr(canvas: HTMLCanvasElement): HTMLCanvasElement {
 
   ctx.putImageData(imageData, 0, 0)
 
-  // Step 2: Unsharp mask — blur then blend
+  // Step 2: Sharpening via CSS contrast filter
   const out = createCanvas(width, height)
   const outCtx = out.getContext('2d')!
 
-  // Draw sharpened canvas
-  outCtx.filter = 'contrast(1.15) brightness(1.05)'
+  outCtx.filter = 'contrast(1.18) brightness(1.04) saturate(1.05)'
   outCtx.drawImage(canvas, 0, 0)
   outCtx.filter = 'none'
 

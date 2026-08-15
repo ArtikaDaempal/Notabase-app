@@ -32,6 +32,8 @@ import {
   FileSpreadsheet,
   ZoomIn,
   ZoomOut,
+  RefreshCw,
+  Calculator,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { Card } from '@/components/ui/card'
@@ -87,7 +89,11 @@ interface ItemRowProps {
 }
 
 function ItemRow({ item, index, onUpdate, onRemove, showConfidence }: ItemRowProps) {
-  const subtotal = (Number(item.qty) || 0) * (Number(item.harga) || 0)
+  const autoSubtotal = (Number(item.qty) || 0) * (Number(item.harga) || 0)
+  const currentSubtotal = Number(item.subtotal) || 0
+  // Inconsistency: qty*harga differs from subtotal by more than Rp1
+  const isInconsistent = item.qty > 0 && item.harga > 0 && currentSubtotal > 0
+    && Math.abs(autoSubtotal - currentSubtotal) > 1
 
   return (
     <motion.div
@@ -102,13 +108,21 @@ function ItemRow({ item, index, onUpdate, onRemove, showConfidence }: ItemRowPro
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">
           {index + 1}
         </span>
-        <button
-          onClick={() => onRemove(index)}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-          aria-label="Hapus baris"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {isInconsistent && (
+            <span className="flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+              <AlertTriangle className="h-3 w-3" />
+              Periksa nominal
+            </span>
+          )}
+          <button
+            onClick={() => onRemove(index)}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+            aria-label="Hapus baris"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Nama Barang */}
@@ -133,7 +147,10 @@ function ItemRow({ item, index, onUpdate, onRemove, showConfidence }: ItemRowPro
             onChange={(e) => {
               const q = Number(e.target.value) || 1
               onUpdate(index, 'qty', q)
-              onUpdate(index, 'subtotal', q * (Number(item.harga) || 0))
+              // Auto-calc nominal only when harga is set
+              if (item.harga > 0) {
+                onUpdate(index, 'subtotal', q * (Number(item.harga) || 0))
+              }
             }}
             className="h-9 rounded-xl border-slate-200 bg-white text-xs text-center"
           />
@@ -146,6 +163,7 @@ function ItemRow({ item, index, onUpdate, onRemove, showConfidence }: ItemRowPro
             onChange={(e) => {
               const h = Number(e.target.value.replace(/[^\d]/g, '')) || 0
               onUpdate(index, 'harga', h)
+              // Auto-calc nominal
               onUpdate(index, 'subtotal', (Number(item.qty) || 1) * h)
             }}
             className="h-9 rounded-xl border-slate-200 bg-white text-xs"
@@ -153,13 +171,13 @@ function ItemRow({ item, index, onUpdate, onRemove, showConfidence }: ItemRowPro
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Nominal</Label>
+          <Label className={cn('text-[10px] font-semibold uppercase tracking-wide', isInconsistent ? 'text-amber-600' : 'text-slate-500')}>Nominal</Label>
           <div className="relative">
             <Input
               type="text"
-              value={item.subtotal ? formatRupiah(item.subtotal) : formatRupiah(subtotal)}
+              value={currentSubtotal ? formatRupiah(currentSubtotal) : (autoSubtotal ? formatRupiah(autoSubtotal) : '')}
               onChange={(e) => onUpdate(index, 'subtotal', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
-              className="h-9 rounded-xl border-slate-200 bg-white text-xs font-semibold"
+              className={cn('h-9 rounded-xl text-xs font-semibold', isInconsistent ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white')}
               placeholder="Rp 0"
             />
           </div>
@@ -279,12 +297,29 @@ export function OcrPreviewView() {
   const [exporting, setExporting] = useState(false)
   const [uploadingOneDrive, setUploadingOneDrive] = useState(false)
   const [form, setForm] = useState<OcrResult | null>(pendingOcr?.result ?? null)
+  // Extended fields not in OcrResult base (from new extraction)
+  const [noTelepon, setNoTelepon] = useState<string>(pendingOcr?.result?.noTelepon ?? '')
+  const [subtotalNominal, setSubtotalNominal] = useState<number>(pendingOcr?.result?.subtotalNominal ?? 0)
+  const [namaBiayaTambahan, setNamaBiayaTambahan] = useState<string>(pendingOcr?.result?.namaBiayaTambahan ?? '')
   // Mobile tab: 'image' or 'form'
   const [mobileTab, setMobileTab] = useState<'image' | 'form'>('form')
   const [imageZoom, setImageZoom] = useState(false)
 
   useEffect(() => {
-    if (pendingOcr?.result) setForm(pendingOcr.result)
+    if (pendingOcr?.result) {
+      const res = pendingOcr.result
+      setForm(res)
+      setNoTelepon(res.noTelepon ?? '')
+      setNamaBiayaTambahan(res.namaBiayaTambahan ?? '')
+
+      // Compute initial subtotal from items if items exist
+      const itemsSum = (res.items || []).reduce((sum, item) => {
+        return sum + (Number(item.subtotal) || (Number(item.qty || 1) * Number(item.harga || 0)))
+      }, 0)
+
+      const initialSubtotal = res.subtotalNominal || (itemsSum > 0 ? itemsSum : res.nominal)
+      setSubtotalNominal(initialSubtotal)
+    }
   }, [pendingOcr])
 
   if (!pendingOcr || !form) {
@@ -316,13 +351,66 @@ export function OcrPreviewView() {
   const update = <K extends keyof OcrResult>(key: K, value: OcrResult[K]) =>
     setForm((f) => (f ? { ...f, [key]: value } : f))
 
-  // Items management
+  // Dynamic recalculation helper
+  const recalculateFromItems = () => {
+    setForm((f) => {
+      if (!f) return f
+      const currentItems = f.items || []
+      const itemsSum = currentItems.reduce((sum, item) => {
+        return sum + (Number(item.subtotal) || (Number(item.qty || 1) * Number(item.harga || 0)))
+      }, 0)
+      const sub = itemsSum > 0 ? itemsSum : (subtotalNominal || f.nominal || 0)
+      const diskon = Number(f.diskon) || 0
+      const pajak = Number(f.pajak) || 0
+      const biaya = Number(f.biayaTambahan) || 0
+      const newTotal = Math.max(0, sub - diskon + pajak + biaya)
+
+      setSubtotalNominal(sub)
+      return {
+        ...f,
+        subtotalNominal: sub,
+        nominal: newTotal,
+        total: newTotal,
+      }
+    })
+  }
+
+  // Items management with dynamic calculation
   const updateItem = (index: number, field: keyof ReceiptItem, value: string | number | null) => {
     setForm((f) => {
       if (!f) return f
       const newItems = [...(f.items || [])]
-      newItems[index] = { ...newItems[index], [field]: value }
-      return { ...f, items: newItems }
+      const curItem = { ...newItems[index], [field]: value }
+
+      // Auto-compute item subtotal when qty or harga changes
+      if (field === 'qty' || field === 'harga') {
+        const q = field === 'qty' ? Number(value) || 1 : Number(curItem.qty) || 1
+        const h = field === 'harga' ? Number(value) || 0 : Number(curItem.harga) || 0
+        curItem.subtotal = q * h
+      }
+
+      newItems[index] = curItem
+
+      // Recalculate sum of all items
+      const itemsSum = newItems.reduce((sum, item) => {
+        return sum + (Number(item.subtotal) || (Number(item.qty || 1) * Number(item.harga || 0)))
+      }, 0)
+
+      const diskon = Number(f.diskon) || 0
+      const pajak = Number(f.pajak) || 0
+      const biaya = Number(f.biayaTambahan) || 0
+      const newSubtotal = itemsSum > 0 ? itemsSum : (subtotalNominal || 0)
+      const newTotal = Math.max(0, newSubtotal - diskon + pajak + biaya)
+
+      setSubtotalNominal(newSubtotal)
+
+      return {
+        ...f,
+        items: newItems,
+        subtotalNominal: newSubtotal,
+        nominal: newTotal,
+        total: newTotal,
+      }
     })
   }
 
@@ -337,7 +425,22 @@ export function OcrPreviewView() {
         urutan: (f.items || []).length,
         keterangan: null,
       }
-      return { ...f, items: [...(f.items || []), newItem] }
+      const newItems = [...(f.items || []), newItem]
+      const itemsSum = newItems.reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0)
+      const diskon = Number(f.diskon) || 0
+      const pajak = Number(f.pajak) || 0
+      const biaya = Number(f.biayaTambahan) || 0
+      const newSubtotal = itemsSum > 0 ? itemsSum : subtotalNominal
+      const newTotal = Math.max(0, newSubtotal - diskon + pajak + biaya)
+
+      setSubtotalNominal(newSubtotal)
+      return {
+        ...f,
+        items: newItems,
+        subtotalNominal: newSubtotal,
+        nominal: newTotal,
+        total: newTotal,
+      }
     })
   }
 
@@ -345,7 +448,51 @@ export function OcrPreviewView() {
     setForm((f) => {
       if (!f) return f
       const newItems = (f.items || []).filter((_, i) => i !== index)
-      return { ...f, items: newItems }
+      const itemsSum = newItems.reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0)
+      const diskon = Number(f.diskon) || 0
+      const pajak = Number(f.pajak) || 0
+      const biaya = Number(f.biayaTambahan) || 0
+      const newSubtotal = itemsSum > 0 ? itemsSum : 0
+      const newTotal = Math.max(0, newSubtotal - diskon + pajak + biaya)
+
+      setSubtotalNominal(newSubtotal)
+      return {
+        ...f,
+        items: newItems,
+        subtotalNominal: newSubtotal,
+        nominal: newTotal,
+        total: newTotal,
+      }
+    })
+  }
+
+  // Update diskon, pajak, or biayaTambahan and dynamically recalculate total
+  const updateFee = (key: 'diskon' | 'pajak' | 'biayaTambahan', value: number) => {
+    setForm((f) => {
+      if (!f) return f
+      const updated = { ...f, [key]: value }
+      const itemsSum = (f.items || []).reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0)
+      const sub = subtotalNominal || itemsSum || f.nominal || 0
+      const newTotal = Math.max(0, sub - (updated.diskon || 0) + (updated.pajak || 0) + (updated.biayaTambahan || 0))
+      return {
+        ...updated,
+        nominal: newTotal,
+        total: newTotal,
+      }
+    })
+  }
+
+  const handleSubtotalChange = (val: number) => {
+    setSubtotalNominal(val)
+    setForm((f) => {
+      if (!f) return f
+      const newTotal = Math.max(0, val - (f.diskon || 0) + (f.pajak || 0) + (f.biayaTambahan || 0))
+      return {
+        ...f,
+        subtotalNominal: val,
+        nominal: newTotal,
+        total: newTotal,
+      }
     })
   }
 
@@ -353,7 +500,7 @@ export function OcrPreviewView() {
 
   const buildSavePayload = () => {
     if (!form) return null
-    let dateStr = new Date().toISOString().slice(0, 10)
+    let dateStr: string | null = null
     const raw = String(form.tanggal || form.transactionDate || '').trim()
     const ymdMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/)
     if (ymdMatch) dateStr = ymdMatch[1]
@@ -369,15 +516,16 @@ export function OcrPreviewView() {
       waktu: form.waktu || null,
       total: form.nominal ?? form.total ?? 0,
       nominal: form.nominal ?? form.total ?? 0,
+      subtotalNominal: subtotalNominal || undefined,
       diskon: form.diskon || 0,
       pajak: form.pajak || 0,
       biayaTambahan: form.biayaTambahan || 0,
+      namaBiayaTambahan: namaBiayaTambahan || null,
       metodePembayaran: form.metodePembayaran || null,
-      sumberDana: form.sumberDana || null,
       description: form.keterangan || form.description,
       keterangan: form.keterangan || form.description,
       alamat: form.alamat || null,
-      noTelepon: form.noTelepon || null,
+      noTelepon: noTelepon || null,
       imageUrl: pendingOcr.imageUrl,
       ocrText: form.ocrRawText || form.ocrText,
       ocrRawText: form.ocrRawText || form.ocrText,
@@ -700,12 +848,14 @@ export function OcrPreviewView() {
               {/* No. Telepon */}
               <FieldWrapper label="No. Telepon Toko" icon={Phone}>
                 <Input
-                  value={form.noTelepon ?? ''}
-                  onChange={(e) => update('noTelepon', e.target.value || null)}
+                  value={noTelepon}
+                  onChange={(e) => setNoTelepon(e.target.value)}
                   className="rounded-xl h-11 border-slate-200 bg-slate-50"
-                  placeholder="No. telepon (jika tercantum)"
+                  placeholder="Nomor telepon toko (jika tercantum)"
+                  type="tel"
                 />
               </FieldWrapper>
+
             </Section>
 
             {/* Section 2: Daftar Barang */}
@@ -740,6 +890,17 @@ export function OcrPreviewView() {
 
             {/* Section 3: Pembayaran & Biaya */}
             <Section icon={Wallet} title="Pembayaran & Biaya">
+              {/* Subtotal */}
+              <FieldWrapper label="Subtotal (sebelum diskon/pajak/biaya)" icon={Calculator}>
+                <Input
+                  type="text"
+                  value={subtotalNominal ? formatRupiah(subtotalNominal) : ''}
+                  onChange={(e) => handleSubtotalChange(Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
+                  className="rounded-xl h-11 border-slate-200 bg-slate-50 font-medium"
+                  placeholder="Rp 0 (opsional)"
+                />
+              </FieldWrapper>
+
               {/* Total */}
               <FieldWrapper
                 label="Total Transaksi (IDR)"
@@ -747,19 +908,31 @@ export function OcrPreviewView() {
                 required={missingTotal}
                 tone={missingTotal ? 'danger' : getFieldTone(fc, 'nominal', 75)}
               >
-                <div className="relative">
-                  <Input
-                    type="text"
-                    value={formatRupiah((form.nominal ?? form.total) || 0)}
-                    onChange={(e) => {
-                      const v = Number(e.target.value.replace(/[^\d]/g, '')) || 0
-                      update('nominal', v)
-                      update('total', v)
-                    }}
-                    className={cn('rounded-xl pr-9 h-11 font-semibold', fieldBorderClass(missingTotal ? 'danger' : getFieldTone(fc, 'nominal', 75)))}
-                    placeholder="Rp 0"
-                  />
-                  <Pencil className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type="text"
+                      value={formatRupiah((form.nominal ?? form.total) || 0)}
+                      onChange={(e) => {
+                        const v = Number(e.target.value.replace(/[^\d]/g, '')) || 0
+                        update('nominal', v)
+                        update('total', v)
+                      }}
+                      className={cn('rounded-xl pr-9 h-11 font-semibold text-blue-900 bg-blue-50/40', fieldBorderClass(missingTotal ? 'danger' : getFieldTone(fc, 'nominal', 75)))}
+                      placeholder="Rp 0"
+                    />
+                    <Pencil className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={recalculateFromItems}
+                    className="rounded-xl h-11 text-xs font-semibold border-slate-200 hover:bg-blue-50 text-blue-600 px-3"
+                    title="Hitung ulang otomatis dari daftar barang"
+                  >
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                    Hitung Ulang
+                  </Button>
                 </div>
               </FieldWrapper>
 
@@ -769,7 +942,7 @@ export function OcrPreviewView() {
                   <Input
                     type="text"
                     value={form.diskon ? formatRupiah(form.diskon) : ''}
-                    onChange={(e) => update('diskon', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
+                    onChange={(e) => updateFee('diskon', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
                     className="rounded-xl h-11 border-slate-200 bg-slate-50"
                     placeholder="Rp 0"
                   />
@@ -778,42 +951,70 @@ export function OcrPreviewView() {
                   <Input
                     type="text"
                     value={form.pajak ? formatRupiah(form.pajak) : ''}
-                    onChange={(e) => update('pajak', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
+                    onChange={(e) => updateFee('pajak', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
                     className="rounded-xl h-11 border-slate-200 bg-slate-50"
                     placeholder="Rp 0"
                   />
                 </FieldWrapper>
               </div>
 
-              {/* Biaya Tambahan */}
-              <FieldWrapper label="Biaya Tambahan / Admin (Rp)" icon={Banknote}>
-                <Input
-                  type="text"
-                  value={form.biayaTambahan ? formatRupiah(form.biayaTambahan) : ''}
-                  onChange={(e) => update('biayaTambahan', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
-                  className="rounded-xl h-11 border-slate-200 bg-slate-50"
-                  placeholder="Rp 0"
-                />
-              </FieldWrapper>
+              {/* Biaya Tambahan — nama + nominal */}
+              <div className="grid grid-cols-2 gap-3">
+                <FieldWrapper label="Nama Biaya Tambahan" icon={Banknote}>
+                  <Input
+                    type="text"
+                    value={namaBiayaTambahan}
+                    onChange={(e) => setNamaBiayaTambahan(e.target.value)}
+                    className="rounded-xl h-11 border-slate-200 bg-slate-50"
+                    placeholder="mis. Service Charge"
+                  />
+                </FieldWrapper>
+                <FieldWrapper label="Nominal Biaya Tambahan (Rp)" icon={Banknote}>
+                  <Input
+                    type="text"
+                    value={form.biayaTambahan ? formatRupiah(form.biayaTambahan) : ''}
+                    onChange={(e) => updateFee('biayaTambahan', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
+                    className="rounded-xl h-11 border-slate-200 bg-slate-50"
+                    placeholder="Rp 0"
+                  />
+                </FieldWrapper>
+              </div>
 
-              {/* Metode Pembayaran + Sumber Dana */}
-              <FieldWrapper label="Metode Pembayaran" icon={CreditCard}>
-                <Input
-                  value={form.metodePembayaran ?? ''}
-                  onChange={(e) => update('metodePembayaran', e.target.value || null)}
-                  className="rounded-xl h-11 border-slate-200 bg-slate-50"
-                  placeholder="Tunai / Transfer / GoPay / DANA / dll."
-                />
-              </FieldWrapper>
+              {/* Ringkasan kalkulasi */}
+              {(subtotalNominal > 0 || (form.diskon ?? 0) > 0 || (form.pajak ?? 0) > 0 || (form.biayaTambahan ?? 0) > 0) && (
+                <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 text-xs space-y-1">
+                  <p className="font-bold text-slate-600 text-[10px] uppercase tracking-wide">Ringkasan Kalkulasi</p>
+                  {subtotalNominal > 0 && (
+                    <div className="flex justify-between text-slate-500">
+                      <span>Subtotal</span>
+                      <span className="font-medium">{formatRupiah(subtotalNominal)}</span>
+                    </div>
+                  )}
+                  {(form.diskon ?? 0) > 0 && (
+                    <div className="flex justify-between text-red-500">
+                      <span>Diskon</span>
+                      <span className="font-medium">− {formatRupiah(form.diskon ?? 0)}</span>
+                    </div>
+                  )}
+                  {(form.pajak ?? 0) > 0 && (
+                    <div className="flex justify-between text-slate-500">
+                      <span>Pajak</span>
+                      <span className="font-medium">+ {formatRupiah(form.pajak ?? 0)}</span>
+                    </div>
+                  )}
+                  {(form.biayaTambahan ?? 0) > 0 && (
+                    <div className="flex justify-between text-slate-500">
+                      <span>{namaBiayaTambahan || 'Biaya Tambahan'}</span>
+                      <span className="font-medium">+ {formatRupiah(form.biayaTambahan ?? 0)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-slate-800 pt-1 border-t border-slate-200">
+                    <span>Total</span>
+                    <span>{formatRupiah((form.nominal ?? form.total) || 0)}</span>
+                  </div>
+                </div>
+              )}
 
-              <FieldWrapper label="Sumber Dana / Rekening" icon={Banknote}>
-                <Input
-                  value={form.sumberDana ?? ''}
-                  onChange={(e) => update('sumberDana', e.target.value || null)}
-                  className="rounded-xl h-11 border-slate-200 bg-slate-50"
-                  placeholder="No. rekening / wallet sumber dana"
-                />
-              </FieldWrapper>
             </Section>
 
             {/* Section 4: Keterangan Umum */}
@@ -850,45 +1051,26 @@ export function OcrPreviewView() {
                 )}
               </Button>
 
-              {/* Secondary: Ekspor Excel + OneDrive */}
+              {/* Secondary: Scan Ulang + Batal */}
               <div className="grid grid-cols-2 gap-2.5">
                 <Button
                   variant="outline"
-                  onClick={handleExportExcel}
-                  disabled={exporting}
-                  className="rounded-xl h-11 border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold"
+                  onClick={() => navigate('scan')}
+                  disabled={saving}
+                  className="rounded-xl h-11 border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
                 >
-                  {exporting ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  Ekspor Excel
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  Scan Ulang
                 </Button>
                 <Button
-                  variant="outline"
-                  onClick={handleSaveOneDrive}
-                  disabled={uploadingOneDrive}
-                  className="rounded-xl h-11 border-blue-200 text-blue-700 hover:bg-blue-50 text-xs font-bold"
+                  variant="ghost"
+                  onClick={() => navigate('scan')}
+                  disabled={saving}
+                  className="rounded-xl h-11 text-slate-500 hover:bg-slate-100 text-xs font-medium"
                 >
-                  {uploadingOneDrive ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Cloud className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  OneDrive
+                  Batal
                 </Button>
               </div>
-
-              {/* Tertiary: Batal */}
-              <Button
-                variant="ghost"
-                onClick={() => navigate('scan')}
-                disabled={saving}
-                className="w-full rounded-xl h-10 text-slate-500 hover:bg-slate-100 text-xs"
-              >
-                Batal
-              </Button>
             </div>
           </motion.div>
         </div>

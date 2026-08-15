@@ -19,24 +19,24 @@
 |---|---|
 | BR-OCR-01 | Format gambar diterima: JPG, JPEG, PNG. Ukuran maksimum 10MB per gambar. |
 | BR-OCR-02 | Setelah capture/import, gambar **wajib** melewati OpenCV preprocessing (crop, deskew, enhance kontras) sebelum masuk ke OCR — hasil OCR mentah tanpa preprocessing tidak boleh langsung dipakai. |
-| BR-OCR-03 | `confidence ≥ 80%` → field auto-terisi, badge hijau, boleh langsung disimpan setelah user menekan "Simpan". |
-| BR-OCR-04 | `50% ≤ confidence < 80%` → field auto-terisi tapi badge kuning "Perlu Review", user **wajib** menyentuh minimal 1 field (dianggap sudah meninjau) sebelum tombol Simpan aktif. |
-| BR-OCR-05 | `confidence < 50%` atau OCR gagal total → form dikosongkan, badge merah "Gagal — Isi Manual", seluruh field wajib diisi manual (sesuai PRD §9 "Jika OCR gagal, form manual muncul"). |
-| BR-OCR-06 | Teks mentah hasil OCR (raw text) selalu disimpan (`ocr_raw_text`) untuk keperluan audit/"Lihat Log" (ada di mockup Detail Nota), meskipun user sudah mengoreksi field terstruktur. **Impl. v1.0**: `ocrRawText` disimpan baik di IndexedDB lokal maupun di kolom `ocr_raw_text` Supabase. |
-| BR-OCR-07 | Field wajib minimum untuk simpan: `tanggal`, `nama_toko`, `nominal` (>0). Field lain (kategori, keterangan) opsional tapi disarankan. |
+| BR-OCR-03 | Seluruh hasil OCR **wajib** melewati alur Pratinjau & Edit (OCR Preview) sebelum disimpan ke database. Auto-save tanpa review telah dihapus demi menjamin akurasi data. |
+| BR-OCR-04 | `50% ≤ confidence < 80%` → field auto-terisi tapi badge kuning "Perlu Review", pengguna dianjurkan mengecek field bertanda kuning/merah sebelum menyimpan. |
+| BR-OCR-05 | `confidence < 50%` atau OCR gagal total → form dikosongkan/diisi parsial, badge merah "Gagal", seluruh field wajib diisi manual. |
+| BR-OCR-06 | Teks mentah hasil OCR (raw text) selalu disimpan (`ocr_raw_text`) untuk keperluan audit/"Lihat Log", meskipun user sudah mengoreksi field terstruktur. |
+| BR-OCR-07 | Field wajib minimum untuk simpan: `nama_toko` dan `nominal` (>0). Jika tanggal tidak terdeteksi oleh OCR, field tanggal dikosongkan (null) agar diisi manual oleh pengguna. |
 
 ---
 
-## 3. Aturan Nota Manual
+## 3. Aturan Nota Manual & Kalkulasi Dinamis
 
 | Aturan | Detail |
 |---|---|
 | BR-MAN-01 | `receipt_number` otomatis generate jika kosong, format `INV-{YYYY}-{sequence_3digit}` per workspace per tahun, tapi tetap bisa diedit manual oleh user. |
 | BR-MAN-02 | Minimal 1 baris barang wajib ada sebelum nota bisa disimpan. |
-| BR-MAN-03 | `subtotal = Σ(qty × harga)` per item, dihitung otomatis, read-only. |
-| BR-MAN-04 | `total = subtotal − diskon + pajak`, dihitung otomatis dan ditampilkan real-time di panel preview. Diskon & pajak boleh nominal rupiah atau persen (pilih salah satu mode per field). |
+| BR-MAN-03 | `subtotal_barang = Σ(qty × harga)` per item. Mengubah Qty atau Harga Satuan item secara otomatis menghitung ulang nominal baris item dan subtotal nota secara real-time. |
+| BR-MAN-04 | `total = subtotal − diskon + pajak + biaya_tambahan`, dihitung otomatis secara real-time di UI setiap kali Qty, Harga Satuan, Diskon, Pajak, atau Biaya Tambahan diubah. Pengguna tetap memiliki kontrol manual jika ingin meng-override total. |
 | BR-MAN-05 | Generate JPG mengikuti template & ukuran yang dipilih user (58mm/80mm thermal atau A4) — resolusi minimum 1080px lebar untuk thermal, 2480px untuk A4 (setara 300dpi). |
-| BR-MAN-06 | Nota manual yang sudah disimpan tetap bisa diedit kembali (sesuai PRD), setiap edit memperbarui `updated_at` dan meregenerasi JPG jika ada perubahan isi. |
+| BR-MAN-06 | Nota manual yang sudah disimpan tetap bisa diedit kembali, setiap edit memperbarui `updated_at`. |
 
 ---
 
@@ -45,11 +45,11 @@
 | Aturan | Detail |
 |---|---|
 | BR-ARC-01 | **Hapus = soft delete.** Set `is_deleted = true`, `deleted_at = now()`. Data hilang dari tampilan Arsip & pencarian, tapi baru dihapus permanen (row + file di Storage) oleh scheduled job setelah 30 hari. |
-| BR-ARC-02 | Edit field apapun di Detail Nota langsung sinkron ke Supabase (sesuai PRD "seluruh perubahan disinkronkan langsung"), dengan optimistic UI update + rollback jika gagal. |
-| BR-ARC-03 | Mengubah daftar barang di halaman edit akan **selalu** memicu recalculate `nominal` (BR-MAN-03/04) agar total tidak pernah nyasar dari isi barang. |
+| BR-ARC-02 | Edit field apapun di Detail Nota langsung sinkron ke Supabase, dengan optimistic UI update + rollback jika gagal. |
+| BR-ARC-03 | Mengubah daftar barang di halaman edit akan **selalu** memicu recalculate `subtotal` dan `nominal` (BR-MAN-03/04) agar total selalu sinkron dengan isi barang. |
 | BR-ARC-04 | Badge sumber (`Scan` / `Galeri` / `Manual`) bersifat **read-only permanen**, tidak berubah walau data lain diedit — untuk keperluan audit asal-usul nota. |
 | BR-ARC-05 | Download gambar mengunduh file resolusi asli dari Storage, bukan thumbnail. |
-| BR-ARC-06 | Cetak Nota: sembunyikan seluruh chrome UI (nav, header, tombol), render gambar nota fit-to-page pada 1 lembar, orientasi otomatis menyesuaikan rasio gambar (potrait untuk thermal, sesuai kertas untuk A4). |
+| BR-ARC-06 | Cetak Nota: sembunyikan seluruh chrome UI (nav, header, tombol), render gambar nota fit-to-page pada 1 lembar, orientasi otomatis menyesuaikan rasio gambar. |
 
 ---
 
@@ -69,7 +69,7 @@
 | Aturan | Detail |
 |---|---|
 | BR-EXP-01 | Nama file otomatis: `Laporan_{NamaPeriode}_{Tahun}.xlsx`, contoh `Laporan_Mei_2025.xlsx`. |
-| BR-EXP-02 | Kolom Excel wajib sesuai PRD §9: Nomor, Tanggal, Nama Toko, Nominal, Keterangan, Status OCR, Jenis Nota — ditambah kolom Kategori (karena kategori jadi fitur filter penting, sebaiknya tetap tampil di laporan). |
+| BR-EXP-02 | Susunan kolom Excel wajib mengikuti urutan: 1. No, 2. No Nota, 3. Nama Toko, 4. Alamat Toko, 5. No Telepon, 6. Tanggal, 7. Waktu, 8. Nama Barang, 9. Jumlah, 10. Harga Satuan, 11. Nominal, 12. Diskon, 13. Pajak, 14. Biaya Tambahan, 15. Subtotal, 16. Total, 17. Keterangan. Seluruh nilai uang diekspor sebagai numerik murni tanpa string "Rp". |
 | BR-EXP-03 | File disimpan lokal (folder default dari Settings) **setiap kali** export dijalankan, apapun status upload OneDrive-nya — upload OneDrive adalah aksi tambahan, bukan pengganti simpan lokal. |
 | BR-EXP-04 | Upload OneDrive secara otomatis terhubung ke akun `ifkadaempal5@gmail.com` tanpa memerlukan login ulang. Perutean folder disesuaikan berdasarkan periode ekspor: `Notabase/Ekspor Bulanan/` untuk ekspor bulanan/harian/mingguan dan `Notabase/Ekspor Tahunan/` untuk ekspor tahunan. |
 | BR-EXP-05 | Retry otomatis 3x dengan backoff untuk upload OneDrive yang gagal karena jaringan, sebelum menampilkan status "Gagal" ke user dengan tombol "Coba Lagi" manual. |

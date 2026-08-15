@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { db } from '@/lib/db'
 
 // POST /api/sync/onedrive — Receive FormData file upload and upload directly to Microsoft Graph API

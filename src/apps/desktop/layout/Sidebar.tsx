@@ -10,6 +10,7 @@
 import React from 'react'
 import {
   LayoutDashboard,
+  ScanLine,
   History,
   FileSpreadsheet,
   Settings,
@@ -42,6 +43,12 @@ export const SIDEBAR_NAV_ITEMS: {
     label: 'Dashboard',
     icon: LayoutDashboard,
     description: 'Ringkasan & Statistik',
+  },
+  {
+    id: 'scan',
+    label: 'Scan Nota',
+    icon: ScanLine,
+    description: 'Pindai & Input Nota Baru',
   },
   {
     id: 'history',

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { getWorkspaceDb } from '@/lib/db'
 import { serializeReceipt } from '@/lib/serialize'
 import { receiptCache } from '@/lib/receipt-cache'
@@ -97,7 +99,6 @@ export async function PUT(
   if (body.nominal !== undefined) updateData.nominal = Number(body.nominal)
   if (body.diskon !== undefined) updateData.diskon = Number(body.diskon)
   if (body.pajak !== undefined) updateData.pajak = Number(body.pajak)
-  if (body.metodePembayaran !== undefined) updateData.metode_pembayaran = body.metodePembayaran
   if (body.keterangan !== undefined) updateData.keterangan = body.keterangan
   if (body.imageUrl !== undefined) updateData.image_url = body.imageUrl
   if (body.ocrRawText !== undefined) updateData.ocr_raw_text = body.ocrRawText

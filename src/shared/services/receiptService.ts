@@ -27,7 +27,7 @@ import {
   validateReceiptMinimum,
   validateManualReceiptItems,
 } from '@/lib/rules/receipt-rules'
-import { softDeleteReceipt } from '@/lib/rules/archive-rules'
+import { reconcileReceiptItems } from '@/lib/utils'
 import type { Receipt, ReceiptItem, OcrResult, StatusOcr, ReceiptType } from '../types/receipt'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,27 +121,12 @@ export function evaluateOcrStatus(confidence: number): Exclude<StatusOcr, 'manua
  * @param pajak  - nilai pajak dalam rupiah (default: 0)
  */
 export function calculateReceiptTotals(
-  items: Pick<ReceiptItem, 'namaBarang' | 'qty' | 'harga'>[] = [],
+  items: any[] = [],
   diskon: number = 0,
   pajak: number = 0,
+  expectedTotal?: number,
 ): { itemsWithSubtotal: ReceiptItem[]; totalNominal: number } {
-  const itemsWithSubtotal: ReceiptItem[] = items.map((it, idx) => {
-    const qty = Math.max(1, Number(it.qty) || 1)
-    const harga = Math.max(0, Number(it.harga) || 0)
-    const subtotal = calculateItemSubtotal(qty, harga)
-    return {
-      namaBarang: it.namaBarang || '',
-      qty,
-      harga,
-      subtotal,
-      urutan: idx,
-      // backward-compat aliases
-      name: it.namaBarang || '',
-      price: harga,
-      total: subtotal,
-    }
-  })
-
+  const itemsWithSubtotal: ReceiptItem[] = reconcileReceiptItems(items, expectedTotal)
   const totalNominal = calculateTotal(itemsWithSubtotal, diskon, pajak)
 
   return { itemsWithSubtotal, totalNominal }
@@ -410,7 +395,6 @@ export const receiptService = {
         nominal: local.nominal,
         diskon: local.diskon,
         pajak: local.pajak,
-        metodePembayaran: local.metodePembayaran,
         keterangan: local.keterangan,
         statusOcr: local.statusOcr,
         ocrConfidence: local.ocrConfidence,
@@ -572,7 +556,6 @@ export const receiptService = {
         nominal: receiptObj.nominal,
         diskon: receiptObj.diskon,
         pajak: receiptObj.pajak,
-        metodePembayaran: receiptObj.metodePembayaran,
         keterangan: receiptObj.keterangan,
         statusOcr: receiptObj.statusOcr,
         ocrConfidence: receiptObj.ocrConfidence,
@@ -605,7 +588,6 @@ export const receiptService = {
         nominal: totalNominal,
         diskon,
         pajak,
-        metodePembayaran: data.metodePembayaran || null,
         keterangan: data.keterangan || null,
         statusOcr: data.statusOcr || 'manual',
         ocrConfidence: data.ocrConfidence || null,
@@ -637,7 +619,6 @@ export const receiptService = {
         nominal: totalNominal,
         diskon,
         pajak,
-        metodePembayaran: data.metodePembayaran || null,
         keterangan: data.keterangan || null,
         statusOcr: data.statusOcr || 'manual',
         ocrConfidence: data.ocrConfidence || null,
@@ -697,7 +678,6 @@ export const receiptService = {
     if (patch.receiptNumber !== undefined) updatePayload.receipt_number = patch.receiptNumber
     if (patch.namaToko !== undefined) updatePayload.nama_toko = patch.namaToko
     if (patch.tanggal !== undefined) updatePayload.tanggal = patch.tanggal
-    if (patch.metodePembayaran !== undefined) updatePayload.metode_pembayaran = patch.metodePembayaran
     if (patch.keterangan !== undefined) updatePayload.keterangan = patch.keterangan
     if (patch.imageUrl !== undefined) updatePayload.image_url = patch.imageUrl
     if (patch.ocrRawText !== undefined) updatePayload.ocr_raw_text = patch.ocrRawText
@@ -790,7 +770,6 @@ export const receiptService = {
         nominal: updatedObj.nominal,
         diskon: updatedObj.diskon,
         pajak: updatedObj.pajak,
-        metodePembayaran: updatedObj.metodePembayaran,
         keterangan: updatedObj.keterangan,
         statusOcr: updatedObj.statusOcr,
         ocrConfidence: updatedObj.ocrConfidence,
@@ -833,7 +812,6 @@ export const receiptService = {
         nominal: totalNominal,
         diskon,
         pajak,
-        metodePembayaran: patch.metodePembayaran ?? existing.metodePembayaran,
         keterangan: patch.keterangan ?? existing.keterangan,
         statusOcr: patch.statusOcr ?? existing.statusOcr,
         ocrConfidence: patch.ocrConfidence ?? existing.ocrConfidence,

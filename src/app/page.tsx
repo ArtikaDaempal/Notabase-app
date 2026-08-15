@@ -5,30 +5,29 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useIsDesktop } from '@/hooks/use-responsive'
-import dynamic from 'next/dynamic'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
 import { isDeviceUnlocked } from '@/shared/services/deviceGate'
 import { InviteGate } from '@/packages/ui-shared/InviteGate'
 import { NetworkStatusBar } from '@/components/ui/network-status-bar'
 import type { NavTab } from '@/types'
 
-// Dynamic imports for view components (Code-Splitting for fast initial page load)
-const Sidebar = dynamic(() => import('@/apps/desktop/layout/Sidebar').then((m) => m.Sidebar))
-const TopBar = dynamic(() => import('@/apps/desktop/layout/TopBar').then((m) => m.TopBar))
-const ArsipDesktopPage = dynamic(() => import('@/apps/desktop/pages/ArsipDesktopPage').then((m) => m.ArsipDesktopPage))
-const BottomNav = dynamic(() => import('@/components/layout/bottom-nav').then((m) => m.BottomNav))
-const SplashScreen = dynamic(() => import('@/components/features/splash/splash-screen').then((m) => m.SplashScreen))
-const DashboardView = dynamic(() => import('@/components/features/dashboard/dashboard-view').then((m) => m.DashboardView))
-const ScanView = dynamic(() => import('@/components/features/scan/scan-view').then((m) => m.ScanView))
-const OcrPreviewView = dynamic(() => import('@/components/features/ocr/ocr-preview-view').then((m) => m.OcrPreviewView))
-const HistoryView = dynamic(() => import('@/components/features/history/history-view').then((m) => m.HistoryView))
-const DetailView = dynamic(() => import('@/components/features/detail/detail-view').then((m) => m.DetailView))
-const ReportView = dynamic(() => import('@/components/features/report/report-view').then((m) => m.ReportView))
-const OnedriveView = dynamic(() => import('@/components/features/onedrive/onedrive-view').then((m) => m.OnedriveView))
-const UploadProgressView = dynamic(() => import('@/components/features/onedrive/upload-progress-view').then((m) => m.UploadProgressView))
-const SettingsView = dynamic(() => import('@/components/features/settings/settings-view').then((m) => m.SettingsView))
-const SearchView = dynamic(() => import('@/components/features/search/search-view').then((m) => m.SearchView))
-const GalleryView = dynamic(() => import('@/components/features/gallery/gallery-view').then((m) => m.GalleryView))
+// Direct component imports for Next.js App Router
+import { Sidebar } from '@/apps/desktop/layout/Sidebar'
+import { TopBar } from '@/apps/desktop/layout/TopBar'
+import { ArsipDesktopPage } from '@/apps/desktop/pages/ArsipDesktopPage'
+import { BottomNav } from '@/components/layout/bottom-nav'
+import { SplashScreen } from '@/components/features/splash/splash-screen'
+import { DashboardView } from '@/components/features/dashboard/dashboard-view'
+import { ScanView } from '@/components/features/scan/scan-view'
+import { OcrPreviewView } from '@/components/features/ocr/ocr-preview-view'
+import { HistoryView } from '@/components/features/history/history-view'
+import { DetailView } from '@/components/features/detail/detail-view'
+import { ReportView } from '@/components/features/report/report-view'
+import { OnedriveView } from '@/components/features/onedrive/onedrive-view'
+import { UploadProgressView } from '@/components/features/onedrive/upload-progress-view'
+import { SettingsView } from '@/components/features/settings/settings-view'
+import { SearchView } from '@/components/features/search/search-view'
+import { GalleryView } from '@/components/features/gallery/gallery-view'
 
 export default function Home() {
   const view = useAppStore((s) => s.view)

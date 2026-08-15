@@ -48,7 +48,6 @@ export interface LocalReceipt {
   nominal: number
   diskon: number
   pajak: number
-  metodePembayaran: string | null
   keterangan: string | null
 
   // OCR metadata (BR-OCR-06: raw text selalu disimpan)
@@ -178,7 +177,6 @@ export class NotabaseDB extends Dexie {
           r.workspaceId = r.workspaceId ?? ''   // diperbaiki saat login workspace
           r.diskon = r.diskon ?? 0
           r.pajak = r.pajak ?? 0
-          r.metodePembayaran = r.metodePembayaran ?? null
           r.isDeleted = r.isDeleted ?? (r.pendingDelete ?? false)
           r.deletedAt = r.deletedAt ?? null
           r.deviceId = r.deviceId ?? null

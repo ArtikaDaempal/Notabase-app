@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { db } from '@/lib/db'
 import ExcelJS from 'exceljs'
 import { serializeReceipt } from '@/lib/serialize'
+import { isValidInvoiceNumber } from '@/lib/utils'
 
 // No hardcoded account — email fetched live from Microsoft Graph API /me
 
@@ -458,8 +461,8 @@ export async function POST(req: NextRequest) {
     return {
       ...serializeReceipt(r, items),
       nominal: r.nominal ?? 0,
-      namaToko: r.nama_toko || 'Lainnya',
-      receiptNumber: r.receipt_number || `INV-${r.id.slice(-8)}`,
+      namaToko: r.nama_toko || '-',
+      receiptNumber: isValidInvoiceNumber(r.receipt_number) ? r.receipt_number : '-',
       keterangan: r.keterangan || '-',
       txDate: new Date(r.tanggal || Date.now()),
     }

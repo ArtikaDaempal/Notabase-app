@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { db } from '@/lib/db'
 import { serializeReceipt } from '@/lib/serialize'
 import { receiptCache } from '@/lib/receipt-cache'
@@ -202,6 +204,9 @@ export async function GET(req: NextRequest) {
 
   const recent = all.slice(0, 5)
 
+  const thirtyDaysR = all.filter((r) => r.dateObj >= thirtyDaysAgo)
+  const thirtyDaysTotal = sum(thirtyDaysR)
+
   return NextResponse.json({
     today: {
       count: todayR.length,
@@ -225,6 +230,7 @@ export async function GET(req: NextRequest) {
       count: all.length,
       total: sum(all),
     },
+    thirtyDaysTotal,
     chart: chart30Days,
     chart30Days,
     chartMonthly,

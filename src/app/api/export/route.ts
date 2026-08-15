@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import ExcelJS from 'exceljs'
 import { db } from '@/lib/db'
 import { serializeReceipt } from '@/lib/serialize'
@@ -93,12 +95,6 @@ export async function POST(req: NextRequest) {
     else if (isValidAddress(r.merchantAddress)) address = r.merchantAddress
     else address = extractAddressFromOcr(ocrText)
 
-    let phone = ''
-    if (isValidPhone(r.noTelepon)) phone = r.noTelepon
-    else if (isValidPhone(r.merchantPhone)) phone = r.merchantPhone
-    else if (isValidPhone(r.phone)) phone = r.phone
-    else phone = extractPhoneFromOcr(ocrText)
-
     return {
       ...r,
       nominal: r.nominal ?? r.total ?? 0,
@@ -106,11 +102,8 @@ export async function POST(req: NextRequest) {
       pajak: Number(r.pajak ?? r.pajakNominal ?? 0),
       biayaTambahan: Number(r.biayaTambahan ?? 0),
       waktu: r.waktu || '',
-      sumberDana: r.sumberDana || '',
-      metodePembayaran: r.metodePembayaran || '',
       namaToko: r.namaToko || r.merchantName || 'Lainnya',
       alamat: address,
-      noTelepon: phone,
       receiptNumber: validInv,
       keterangan: r.keterangan || r.description || '',
       txDate: isNaN(txDate.getTime()) ? new Date() : txDate,
@@ -144,23 +137,23 @@ export async function POST(req: NextRequest) {
   })
 
   detail.columns = [
-    { width: 6 },  // 1.  No
-    { width: 20 }, // 2.  No. Nota
-    { width: 26 }, // 3.  Nama Toko
-    { width: 14 }, // 4.  Tanggal
-    { width: 28 }, // 5.  Nama Barang
-    { width: 12 }, // 6.  Banyaknya
-    { width: 18 }, // 7.  Harga Satuan (Rp)
-    { width: 18 }, // 8.  Nominal (Rp)
-    { width: 16 }, // 9.  Diskon (Rp)
-    { width: 16 }, // 10. Pajak (Rp)
-    { width: 18 }, // 11. Total Transaksi (Rp)
-    { width: 22 }, // 12. Metode Pembayaran
-    { width: 30 }, // 13. Alamat Toko
-    { width: 18 }, // 14. No. Telepon
-    { width: 12 }, // 15. Waktu
-    { width: 28 }, // 16. Sumber Dana
-    { width: 35 }, // 17. Keterangan
+    { width: 6 },   // 1.  No
+    { width: 22 },  // 2.  No Nota
+    { width: 28 },  // 3.  Nama Toko
+    { width: 32 },  // 4.  Alamat Toko
+    { width: 18 },  // 5.  No Telepon
+    { width: 14 },  // 6.  Tanggal
+    { width: 10 },  // 7.  Waktu
+    { width: 32 },  // 8.  Nama Barang
+    { width: 10 },  // 9.  Jumlah
+    { width: 18 },  // 10. Harga Satuan (Rp)
+    { width: 18 },  // 11. Nominal (Rp)
+    { width: 16 },  // 12. Diskon (Rp)
+    { width: 16 },  // 13. Pajak (Rp)
+    { width: 18 },  // 14. Biaya Tambahan (Rp)
+    { width: 18 },  // 15. Subtotal (Rp)
+    { width: 18 },  // 16. Total (Rp)
+    { width: 35 },  // 17. Keterangan
   ]
 
   const MONTHS = [
@@ -182,21 +175,21 @@ export async function POST(req: NextRequest) {
 
   const headers = [
     'No',
-    'No. Nota',
+    'No Nota',
     'Nama Toko',
-    'Tanggal',
-    'Nama Barang',
-    'Banyaknya',
-    'Harga Satuan (Rp)',
-    'Nominal (Rp)',
-    'Diskon (Rp)',
-    'Pajak (Rp)',
-    'Total Transaksi (Rp)',
-    'Metode Pembayaran',
     'Alamat Toko',
-    'No. Telepon',
+    'No Telepon',
+    'Tanggal',
     'Waktu',
-    'Sumber Dana',
+    'Nama Barang',
+    'Jumlah',
+    'Harga Satuan',
+    'Nominal',
+    'Diskon',
+    'Pajak',
+    'Biaya Tambahan',
+    'Subtotal',
+    'Total',
     'Keterangan',
   ]
   const TOTAL_COLS = headers.length
@@ -255,6 +248,12 @@ export async function POST(req: NextRequest) {
       const formattedDate = new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(r.txDate)
       const items = r.items && Array.isArray(r.items) && r.items.length > 0 ? r.items : null
 
+      // Calculate subtotal: from items sum or fallback
+      const itemsSubtotal = items
+        ? items.reduce((s: number, it: any) => s + (Number(it.subtotal ?? it.total ?? 0)), 0)
+        : 0
+      const subtotalValue = Number(r.subtotalNominal) || itemsSubtotal || r.nominal
+
       if (items) {
         items.forEach((item: any) => {
           const itemName = item.namaBarang || item.name || 'Item'
@@ -265,22 +264,22 @@ export async function POST(req: NextRequest) {
 
           const row = detail.addRow([
             rowCounter++,
-            r.receiptNumber,
-            r.namaToko,
-            formattedDate,
-            itemName,
-            itemQty,
-            itemPrice,
-            itemSubtotal,
-            r.diskon || 0,
-            r.pajak || 0,
-            r.nominal,
-            r.metodePembayaran || '',
-            r.alamat || '',
-            r.noTelepon || '',
-            r.waktu || '',
-            r.sumberDana || '',
-            itemKet,
+            r.receiptNumber || '',    // No Nota
+            r.namaToko,              // Nama Toko
+            r.alamat || '',          // Alamat Toko
+            r.noTelepon || '',       // No Telepon
+            formattedDate,           // Tanggal
+            r.waktu || '',           // Waktu
+            itemName,                // Nama Barang
+            itemQty,                 // Jumlah (pure number)
+            itemPrice,               // Harga Satuan (pure number)
+            itemSubtotal,            // Nominal (pure number)
+            r.diskon || 0,           // Diskon (pure number)
+            r.pajak || 0,            // Pajak (pure number)
+            r.biayaTambahan || 0,    // Biaya Tambahan (pure number)
+            subtotalValue,           // Subtotal (pure number)
+            r.nominal,               // Total (pure number)
+            itemKet,                 // Keterangan
           ])
           row.height = 20
           row.eachCell((cell, colNumber) => {
@@ -288,17 +287,17 @@ export async function POST(req: NextRequest) {
             cell.border = {
               bottom: { style: 'thin', color: { argb: 'FFF3F4F6' } },
             }
-            // Qty (col 6)
-            if (colNumber === 6) {
+            // Jumlah (col 9)
+            if (colNumber === 9) {
               cell.numFmt = '#,##0'
               cell.alignment = { vertical: 'middle', horizontal: 'center' }
             }
-            // Harga Satuan (col 7), Nominal (col 8), Diskon (col 9), Pajak (col 10), Total (col 11)
-            if ([7, 8, 9, 10, 11].includes(colNumber)) {
+            // Numeric money columns: Harga Satuan(10), Nominal(11), Diskon(12), Pajak(13), Biaya Tambahan(14), Subtotal(15), Total(16)
+            if ([10, 11, 12, 13, 14, 15, 16].includes(colNumber)) {
               cell.numFmt = '#,##0'
               cell.alignment = { vertical: 'middle', horizontal: 'right' }
             }
-            if (colNumber === 11) { cell.font = { bold: true } }
+            if (colNumber === 16) { cell.font = { bold: true } }  // Total bold
             if (colNumber === 1) { cell.alignment = { horizontal: 'center', vertical: 'middle' } }
           })
         })
@@ -306,22 +305,22 @@ export async function POST(req: NextRequest) {
         const fallbackItemName = r.keterangan || r.description || r.namaToko || 'Item'
         const row = detail.addRow([
           rowCounter++,
-          r.receiptNumber || '',
-          r.namaToko,
-          formattedDate,
-          fallbackItemName,
-          1,
-          r.nominal,
-          r.nominal,
-          r.diskon || 0,
-          r.pajak || 0,
-          r.nominal,
-          r.metodePembayaran || '',
-          r.alamat || '',
-          r.noTelepon || '',
-          r.waktu || '',
-          r.sumberDana || '',
-          r.keterangan || '',
+          r.receiptNumber || '',    // No Nota
+          r.namaToko,              // Nama Toko
+          r.alamat || '',          // Alamat Toko
+          r.noTelepon || '',       // No Telepon
+          formattedDate,           // Tanggal
+          r.waktu || '',           // Waktu
+          fallbackItemName,        // Nama Barang
+          1,                       // Jumlah
+          r.nominal,               // Harga Satuan
+          r.nominal,               // Nominal
+          r.diskon || 0,           // Diskon
+          r.pajak || 0,            // Pajak
+          r.biayaTambahan || 0,    // Biaya Tambahan
+          subtotalValue,           // Subtotal
+          r.nominal,               // Total
+          r.keterangan || '',      // Keterangan
         ])
         row.height = 20
         row.eachCell((cell, colNumber) => {
@@ -329,15 +328,15 @@ export async function POST(req: NextRequest) {
           cell.border = {
             bottom: { style: 'thin', color: { argb: 'FFF3F4F6' } },
           }
-          if (colNumber === 6) {
+          if (colNumber === 9) {
             cell.numFmt = '#,##0'
             cell.alignment = { vertical: 'middle', horizontal: 'center' }
           }
-          if ([7, 8, 9, 10, 11].includes(colNumber)) {
+          if ([10, 11, 12, 13, 14, 15, 16].includes(colNumber)) {
             cell.numFmt = '#,##0'
             cell.alignment = { vertical: 'middle', horizontal: 'right' }
           }
-          if (colNumber === 11) { cell.font = { bold: true } }
+          if (colNumber === 16) { cell.font = { bold: true } }
           if (colNumber === 1) { cell.alignment = { horizontal: 'center', vertical: 'middle' } }
         })
       }
@@ -345,7 +344,7 @@ export async function POST(req: NextRequest) {
 
     // 4. Add TOTAL row
     const groupTotal = groupReceipts.reduce((a, b) => a + (b.nominal || 0), 0)
-    const totalRow = detail.addRow(['', '', '', '', '', '', '', '', '', '', 'TOTAL', groupTotal, '', '', '', '', ''])
+    const totalRow = detail.addRow(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'TOTAL', groupTotal])
     totalRow.height = 24
     totalRow.eachCell((cell, colNumber) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } }
@@ -354,7 +353,7 @@ export async function POST(req: NextRequest) {
         top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
         bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } }
       }
-      if (colNumber === 12) {
+      if (colNumber === 17) {  // Total column = 17th
         cell.numFmt = '#,##0'
         cell.alignment = { horizontal: 'right', vertical: 'middle' }
       }

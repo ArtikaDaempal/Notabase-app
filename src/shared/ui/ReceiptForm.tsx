@@ -22,6 +22,7 @@ import {
   X,
   Loader2,
   LayoutTemplate,
+  Phone,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -69,14 +70,16 @@ export function ReceiptForm({
   const [receiptNumber, setReceiptNumber] = useState(
     initialData?.receiptNumber || initialData?.invoiceNumber || '',
   )
-  const [metodePembayaran, setMetodePembayaran] = useState(initialData?.metodePembayaran || 'Tunai')
   const [receiptTemplate, setReceiptTemplate] = useState(initialData?.receiptTemplate || '80mm')
   const [keterangan, setKeterangan] = useState(
     initialData?.keterangan || initialData?.description || '',
   )
 
+  const [noTelepon, setNoTelepon] = useState(initialData?.noTelepon || '')
   const [diskon, setDiskon] = useState<number>(initialData?.diskon ?? 0)
   const [pajak, setPajak] = useState<number>(initialData?.pajak ?? 0)
+  const [biayaTambahan, setBiayaTambahan] = useState<number>(initialData?.biayaTambahan ?? 0)
+  const [namaBiayaTambahan, setNamaBiayaTambahan] = useState(initialData?.namaBiayaTambahan || '')
 
   // Items state
   const [items, setItems] = useState<ReceiptItem[]>(() => {
@@ -156,24 +159,31 @@ export function ReceiptForm({
 
     setErrors({})
 
+    const computedTotal = items.length > 0
+      ? (rawSubtotalSum - Number(diskon || 0) + Number(pajak || 0) + Number(biayaTambahan || 0))
+      : Number(initialData?.nominal ?? totalNominal)
+
     const payload: Partial<Receipt> = {
       ...initialData,
       namaToko: namaToko.trim(),
       tanggal,
+      noTelepon: noTelepon.trim() || undefined,
       receiptNumber: receiptNumber.trim() || undefined,
-      metodePembayaran,
       receiptTemplate,
       keterangan: keterangan.trim() || undefined,
+      subtotalNominal: rawSubtotalSum || undefined,
       diskon: Number(diskon) || 0,
       pajak: Number(pajak) || 0,
-      nominal: items.length > 0 ? totalNominal : Number(initialData?.nominal ?? totalNominal),
+      biayaTambahan: Number(biayaTambahan) || 0,
+      namaBiayaTambahan: namaBiayaTambahan.trim() || undefined,
+      nominal: computedTotal,
       items: itemsWithSubtotal,
 
       // Deprecated aliases
       merchantName: namaToko.trim(),
       transactionDate: tanggal,
       invoiceNumber: receiptNumber.trim() || undefined,
-      total: items.length > 0 ? totalNominal : Number(initialData?.nominal ?? totalNominal),
+      total: computedTotal,
       description: keterangan.trim() || undefined,
     }
 
@@ -235,36 +245,35 @@ export function ReceiptForm({
               <span className="flex items-center gap-1.5">
                 <Hash className="h-3.5 w-3.5 text-blue-500" /> No. Nota / Invoice
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">Auto (opsional)</span>
+              <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span>
             </Label>
             <Input
               value={receiptNumber}
               onChange={(e) => setReceiptNumber(e.target.value)}
-              placeholder="INV-2025-001 (Otomatis jika kosong)"
+              placeholder="Nomor invoice / nota"
               className="rounded-xl h-11 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-sm font-mono"
+            />
+          </div>
+
+          {/* No Telepon Toko */}
+          <div className="space-y-1.5">
+            <Label className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-blue-500" /> No. Telepon Toko
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span>
+            </Label>
+            <Input
+              value={noTelepon}
+              onChange={(e) => setNoTelepon(e.target.value)}
+              placeholder="Nomor telepon toko"
+              type="tel"
+              className="rounded-xl h-11 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-sm"
             />
           </div>
 
 
 
-          {/* Metode Pembayaran */}
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400">
-              <CreditCard className="h-3.5 w-3.5 text-blue-500" /> Metode Pembayaran
-            </Label>
-            <Select value={metodePembayaran} onValueChange={setMetodePembayaran}>
-              <SelectTrigger className="rounded-xl h-11 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-sm">
-                <SelectValue placeholder="Pilih metode" />
-              </SelectTrigger>
-              <SelectContent>
-                {METODE_PEMBAYARAN_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           {/* Template Nota */}
           <div className="space-y-1.5">
@@ -379,11 +388,11 @@ export function ReceiptForm({
           </div>
         )}
 
-        {/* Diskon, Pajak & Ringkasan Total (BR-MAN-04) */}
+        {/* Diskon, Pajak, Biaya Tambahan & Ringkasan Total (BR-MAN-04) */}
         <div className="border-t border-slate-100 dark:border-slate-800 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Diskon (Rp)</Label>
+              <Label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Diskon (Rp)</Label>
               <Input
                 type="number"
                 min="0"
@@ -393,13 +402,34 @@ export function ReceiptForm({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Pajak (Rp)</Label>
+              <Label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Pajak (Rp)</Label>
               <Input
                 type="number"
                 min="0"
                 value={pajak}
                 onChange={(e) => setPajak(Number(e.target.value) || 0)}
                 className="rounded-xl h-10 text-xs border-slate-200 dark:border-slate-700"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Nama Biaya Tambahan</Label>
+              <Input
+                type="text"
+                value={namaBiayaTambahan}
+                onChange={(e) => setNamaBiayaTambahan(e.target.value)}
+                className="rounded-xl h-10 text-xs border-slate-200 dark:border-slate-700"
+                placeholder="Service Charge"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Nominal Biaya (Rp)</Label>
+              <Input
+                type="number"
+                min="0"
+                value={biayaTambahan}
+                onChange={(e) => setBiayaTambahan(Number(e.target.value) || 0)}
+                className="rounded-xl h-10 text-xs border-slate-200 dark:border-slate-700"
+                placeholder="0"
               />
             </div>
           </div>
@@ -423,9 +453,15 @@ export function ReceiptForm({
                 <span>+{formatRupiah(pajak)}</span>
               </div>
             )}
+            {biayaTambahan > 0 && (
+              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                <span>{namaBiayaTambahan || 'Biaya Tambahan'} (+):</span>
+                <span>+{formatRupiah(biayaTambahan)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-base font-extrabold text-blue-700 dark:text-blue-400 pt-1 border-t border-blue-200/50 dark:border-blue-900">
               <span>TOTAL NOMINAL:</span>
-              <span>{formatRupiah(totalNominal)}</span>
+              <span>{formatRupiah(computedTotal)}</span>
             </div>
           </div>
         </div>

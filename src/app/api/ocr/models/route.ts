@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/ocr/models — list available Gemini models for the configured API key
 export async function GET() {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY

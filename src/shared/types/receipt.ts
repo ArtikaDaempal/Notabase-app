@@ -68,7 +68,6 @@ export interface Receipt {
   waktu?: string | null             // jam transaksi "HH:MM"
   namaToko: string
   alamatToko?: string | null        // alias bersih untuk alamat toko
-  noTelepon?: string | null         // nomor telepon toko
   nominal: number                   // total akhir = subtotal − diskon + pajak
   diskon: number
   diskonNominal?: number            // diskon dalam Rupiah
@@ -77,8 +76,6 @@ export interface Receipt {
   pajakNominal?: number             // pajak dalam Rupiah
   pajakPersen?: number              // pajak dalam persen
   biayaTambahan?: number            // biaya admin/transaksi tambahan
-  sumberDana?: string | null        // rekening/wallet sumber dana
-  metodePembayaran: string | null
   keterangan: string | null
 
   // OCR metadata (BR-OCR-03 s.d. BR-OCR-06)
@@ -135,7 +132,6 @@ export interface LocalReceipt {
   namaToko: string
   alamat?: string | null
   alamatToko?: string | null
-  noTelepon?: string | null
   nominal: number
   diskon: number
   diskonNominal?: number
@@ -144,8 +140,6 @@ export interface LocalReceipt {
   pajakNominal?: number
   pajakPersen?: number
   biayaTambahan?: number
-  sumberDana?: string | null
-  metodePembayaran: string | null
   keterangan: string | null
 
   statusOcr: StatusOcr | null
@@ -174,17 +168,18 @@ export interface OcrResult {
   receiptNumber: string | null
   namaToko: string
   alamat?: string | null
-  noTelepon?: string | null
+  noTelepon?: string | null         // nomor telepon toko/merchant
   tanggal: string | null
   waktu?: string | null             // jam transaksi "HH:MM"
   nominal: number
+  subtotalNominal?: number          // subtotal sebelum diskon/pajak/biaya tambahan
   diskon?: number                   // diskon (nominal Rp)
   diskonPersen?: number             // diskon (%)
   pajak?: number                    // pajak nominal Rp
   pajakPersen?: number              // pajak (%)
   biayaTambahan?: number            // biaya admin/transaksi
+  namaBiayaTambahan?: string | null // label biaya tambahan (mis. "Service Charge", "Biaya Admin")
   metodePembayaran?: string | null
-  sumberDana?: string | null        // rekening/wallet sumber dana
   keterangan: string | null
   items: ReceiptItem[]
   ocrRawText: string

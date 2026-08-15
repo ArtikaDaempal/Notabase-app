@@ -18,10 +18,16 @@ import {
   ArrowLeft,
   Download,
   ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RefreshCw,
   Pencil,
   Save,
   X,
   Store,
+  Tag,
+  Phone,
+  Calculator,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
@@ -31,10 +37,123 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { formatRupiah, formatDateID, formatTime, cn, isValidInvoiceNumber } from '@/lib/utils'
+import { formatRupiah, formatDateID, formatTime, cn, isValidInvoiceNumber, normalizeReceiptItem, reconcileReceiptItems } from '@/lib/utils'
 import { downloadReceiptImage } from '@/lib/download-image'
 import { ImageLightbox } from '@/components/features/gallery/image-lightbox'
 import type { Receipt } from '@/types'
+
+/**
+ * Client-side invoice number extractor — mirrors parseInvoice in api/ocr/route.ts.
+ * Used to recover invoice numbers from stored ocrRawText for already-saved receipts.
+ */
+function extractInvoiceFromText(text: string): string | null {
+  if (!text) return null
+
+  const clean = (raw: string): string | null => {
+    const c = raw.replace(/^[#:\s]+/, '').replace(/\s+/g, '').trim()
+    return isValidInvoiceNumber(c) ? c : null
+  }
+
+  // Labeled patterns — allow spaces inside captured number for OCR splits
+  const labeled: RegExp[] = [
+    /\bno\.?\s*invoice\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\binvoice\s*(?:no|number|num|nomor)\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bnomor\s*(?:invoice|nota|faktur|kwitansi|transaksi)\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*nota\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*faktur\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*kwitansi\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*ref(?:erensi)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\bno\.?\s*transaksi\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\breference\s*(?:no|number|num)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\btrx\s*(?:id|no|ref)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\border\s*(?:id|no|ref)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+  ]
+  for (const p of labeled) {
+    const m = text.match(p)
+    if (m && m[1]) {
+      const r = clean(m[1].split(/\n/)[0].trim())
+      if (r) return r
+    }
+  }
+
+  // Standalone prefix patterns
+  const prefix: RegExp[] = [
+    /\b(INV[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+    /\b(TRX[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+    /\b(ORD[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+    /\b(REF[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+  ]
+  for (const p of prefix) {
+    const m = text.match(p)
+    if (m && m[1]) {
+      const r = clean(m[1])
+      if (r) return r
+    }
+  }
+
+  return null
+}
+
+function getItemsForDisplay(receipt: any): any[] {
+  if (!receipt) return []
+
+  let list: any[] = []
+
+  if (receipt.items && Array.isArray(receipt.items) && receipt.items.length > 0) {
+    list = reconcileReceiptItems(receipt.items, receipt.total ?? receipt.nominal)
+  } else {
+    const text = receipt.ocrRawText || receipt.ocrText || ''
+    if (text) {
+      const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
+      const parsed: any[] = []
+      const invalidNames = new Set([
+        'BANYAKNYA', 'NAMA BARANG', 'HARGA', 'TOTAL', 'SUBTOTAL', 'GRAND TOTAL',
+        'QTY', 'ITEM', 'JUMLAH', 'BAYAR', 'KEMBALI', 'KASIR', 'TANGGAL', 'NOTA',
+        'STATUS', 'TERBAYAR', 'INVOICE', 'PEMBAYARAN', 'TAGIHAN', 'KEPADA'
+      ])
+
+      for (const line of lines) {
+        const upper = line.toUpperCase()
+        if (invalidNames.has(upper) || /^(tanda|hormat|terima|total|subtotal|jumlah|bayar|kembali|cash|status|tanggal|invoice|terbayar)/i.test(line)) {
+          continue
+        }
+        const m = line.match(/^(.+?)\s+(?:rp\.?\s*)?([\d.]+)\s*$/i)
+        if (m) {
+          let name = m[1]
+            .replace(/^(?:rp\.?\s*[\d.]*\s*)+/gi, '')  // strip leading Rp prefix
+            .replace(/(?:\s*rp\.?\s*[\d.]*)+$/gi, '')  // strip trailing Rp suffix
+            .replace(/\b(?:rp|rupiah|jumlah|total|subtotal)\b/gi, '')
+            .trim()
+          const price = parseFloat(m[2].replace(/\./g, ''))
+          if (name && name.length >= 2 && !isNaN(price) && price > 0) {
+            parsed.push({ namaBarang: name, qty: 1, harga: price, subtotal: price })
+          }
+        }
+      }
+
+      if (parsed.length > 0) {
+        list = reconcileReceiptItems(parsed, receipt.total ?? receipt.nominal)
+      }
+    }
+  }
+
+  // Include Biaya Layanan / Admin as distinct item row if present and not already listed
+  const fee = Number(receipt.biayaTambahan ?? 0)
+  if (fee > 0) {
+    const hasFeeRow = list.some((it) => /biaya\s*(layanan|admin|transaksi)|fee/i.test(it.namaBarang || it.name || ''))
+    if (!hasFeeRow) {
+      list.push({
+        namaBarang: 'Biaya Layanan / Admin',
+        qty: 1,
+        harga: fee,
+        subtotal: fee,
+        urutan: list.length,
+      })
+    }
+  }
+
+  return list
+}
 
 export function DetailView() {
   const { selectedReceiptId, goBack } = useAppStore()
@@ -47,6 +166,7 @@ export function DetailView() {
   const [saving, setSaving] = useState(false)
   const [editForm, setEditForm] = useState<Partial<Receipt>>({})
   const [showOcr, setShowOcr] = useState(false)
+  const [cardZoom, setCardZoom] = useState(1.0)
 
   const fetchReceiptDetail = () => {
     if (!selectedReceiptId) return
@@ -60,17 +180,19 @@ export function DetailView() {
       })
       .then((d) => {
         const rawInv = d.receipt_number || d.receiptNumber || d.invoice_number || d.invoiceNumber || ''
-        const cleanInv = isValidInvoiceNumber(rawInv) ? rawInv : ''
-        const cleanDate = d.tanggal || d.transactionDate ? String(d.tanggal || d.transactionDate).slice(0, 10) : ''
         const rawOcr = d.ocr_raw_text || d.ocrRawText || d.ocrText || ''
+        // Fallback: if no invoice stored, try to extract from ocrRawText (for already-saved receipts)
+        const storedInv = isValidInvoiceNumber(rawInv) ? rawInv : ''
+        const cleanInv = storedInv || extractInvoiceFromText(rawOcr) || ''
+        const cleanDate = d.tanggal || d.transactionDate ? String(d.tanggal || d.transactionDate).slice(0, 10) : ''
         const existingItems = Array.isArray(d.items) && d.items.length > 0 ? d.items : (Array.isArray(d.receipt_items) ? d.receipt_items : [])
         const fallbackItems = extractItemsFromOcrText(rawOcr)
         const finalItems = existingItems.length > 0 ? existingItems : fallbackItems
 
         const cleanedData = {
           ...d,
-          merchantName: d.nama_toko || d.namaToko || d.merchantName || 'Nota Belanja',
-          namaToko: d.nama_toko || d.namaToko || d.merchantName || 'Nota Belanja',
+          merchantName: d.nama_toko || d.namaToko || d.merchantName || '-',
+          namaToko: d.nama_toko || d.namaToko || d.merchantName || '-',
           invoiceNumber: cleanInv,
           receiptNumber: cleanInv,
           transactionDate: cleanDate,
@@ -145,6 +267,10 @@ export function DetailView() {
       tanggal: cleanDate,
       total: Number(editForm.total ?? editForm.nominal ?? 0),
       nominal: Number(editForm.total ?? editForm.nominal ?? 0),
+      subtotalNominal: Number(editForm.subtotalNominal) || undefined,
+      noTelepon: editForm.noTelepon || null,
+      biayaTambahan: Number(editForm.biayaTambahan) || 0,
+      namaBiayaTambahan: editForm.namaBiayaTambahan || null,
       invoiceNumber: cleanInv,
       receiptNumber: cleanInv,
       description: editForm.description || editForm.keterangan || '',
@@ -351,66 +477,77 @@ export function DetailView() {
             animate={{ opacity: 1, y: 0 }}
             className="w-full lg:w-2/5 lg:sticky lg:top-24"
           >
-            <Card className="overflow-hidden rounded-2xl border border-slate-100 shadow-sm">
-              {/* Receipt header */}
-              <div className="bg-white px-5 pt-5 pb-4 text-center border-b border-dashed border-slate-200">
-                <div className="relative">
-                  {receipt.imageUrl ? (
-                    <>
-                      <button
-                        onClick={() => setLightboxOpen(true)}
-                        className="group relative mx-auto block h-auto max-h-52 w-full overflow-hidden rounded-xl"
-                        aria-label="Perbesar gambar nota"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          id="printable-receipt-image"
-                          src={receipt.imageUrl}
-                          alt={receipt.merchantName}
-                          className="h-full w-full object-contain transition-opacity group-hover:opacity-80"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50">
-                            <ZoomIn className="h-5 w-5 text-white" />
+            <Card className="overflow-hidden rounded-2xl border border-slate-100 shadow-sm transition-all duration-200">
+              <div
+                className="overflow-auto max-h-[78vh] transition-transform duration-200 origin-top"
+                onWheel={(e) => {
+                  if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault()
+                    if (e.deltaY < 0) setCardZoom((z) => Math.min(+(z + 0.25).toFixed(2), 2.5))
+                    else setCardZoom((z) => Math.max(+(z - 0.25).toFixed(2), 0.5))
+                  }
+                }}
+              >
+                <div style={{ transform: `scale(${cardZoom})`, transformOrigin: 'top center', transition: 'transform 0.2s ease-out' }}>
+                  {/* Receipt header */}
+                  <div className="bg-white px-5 pt-5 pb-4 text-center border-b border-dashed border-slate-200">
+                    <div className="relative">
+                      {receipt.imageUrl ? (
+                        <>
+                          <button
+                            onClick={() => setLightboxOpen(true)}
+                            className="group relative mx-auto block h-auto max-h-52 w-full overflow-hidden rounded-xl"
+                            aria-label="Perbesar gambar nota"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              id="printable-receipt-image"
+                              src={receipt.imageUrl}
+                              alt={receipt.merchantName}
+                              className="h-full w-full object-contain transition-opacity group-hover:opacity-80"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50">
+                                <ZoomIn className="h-5 w-5 text-white" />
+                              </div>
+                            </div>
+                          </button>
+                          {/* Image toolbar */}
+                          <div className="mt-2 flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => setLightboxOpen(true)}
+                              className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                            >
+                              <ZoomIn className="h-3 w-3" /> Perbesar
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (receipt.imageUrl) {
+                                  const name = receipt.namaToko || receipt.merchantName || 'Nota'
+                                  const date = receipt.tanggal || receipt.transactionDate || new Date().toISOString()
+                                  downloadReceiptImage(receipt.imageUrl, name, date)
+                                    .catch(() => toast.error('Gagal mengunduh gambar'))
+                                }
+                              }}
+                              className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                            >
+                              <Download className="h-3 w-3" /> Unduh
+                            </button>
                           </div>
+                        </>
+                      ) : (
+                        <div className="flex h-32 w-full items-center justify-center rounded-xl bg-slate-100">
+                          <ShoppingBag className="h-10 w-10 text-slate-300" />
                         </div>
-                      </button>
-                      {/* Image toolbar */}
-                      <div className="mt-2 flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => setLightboxOpen(true)}
-                          className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-                        >
-                          <ZoomIn className="h-3 w-3" /> Perbesar
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (receipt.imageUrl) {
-                              const name = receipt.namaToko || receipt.merchantName || 'Nota'
-                              const date = receipt.tanggal || receipt.transactionDate || new Date().toISOString()
-                              downloadReceiptImage(receipt.imageUrl, name, date)
-                                .catch(() => toast.error('Gagal mengunduh gambar'))
-                            }
-                          }}
-                          className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-                        >
-                          <Download className="h-3 w-3" /> Unduh
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex h-32 w-full items-center justify-center rounded-xl bg-slate-100">
-                      <ShoppingBag className="h-10 w-10 text-slate-300" />
+                      )}
                     </div>
-                  )}
-                </div>
-                <h2 className="mt-3 text-base font-bold uppercase tracking-wide text-slate-900">
-                  {receipt.merchantName}
-                </h2>
-                <p className="text-xs text-slate-400">
-                  {formatDateID(receipt.transactionDate)}
-                </p>
-              </div>
+                    <h2 className="mt-3 text-base font-bold uppercase tracking-wide text-slate-900">
+                      {receipt.merchantName}
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      {formatDateID(receipt.transactionDate)}
+                    </p>
+                  </div>
 
               {/* Line items section (Editable in Edit Mode, static in View Mode) */}
               {isEditing ? (
@@ -513,38 +650,30 @@ export function DetailView() {
                   </div>
                 </div>
               ) : (
-                receipt.items && receipt.items.length > 0 ? (
-                  <div className="overflow-x-auto border-t border-slate-100 px-3 py-3">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-slate-400 font-semibold border-b border-slate-100 text-[10px] uppercase">
-                          <th className="text-left py-2 font-bold pr-2">Nama Barang</th>
-                          <th className="text-center py-2 font-bold w-10 px-1">Qty</th>
-                          <th className="text-right py-2 font-bold whitespace-nowrap px-1.5">Harga</th>
-                          <th className="text-right py-2 font-bold whitespace-nowrap pl-1.5">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 text-slate-700">
-                        {receipt.items.map((item: any, idx: number) => {
-                          const itemName = item.name || item.namaBarang || 'Item'
-                          const itemQty = item.qty || 1
-                          const itemPrice = item.price ?? item.harga ?? 0
-                          const itemTotal = item.subtotal ?? item.total ?? (itemQty * itemPrice)
-                          return (
-                            <tr key={idx} className="hover:bg-slate-50/50">
-                              <td className="py-2 text-left font-medium text-[11px] sm:text-xs pr-2 break-words">{itemName}</td>
-                              <td className="py-2 text-center text-slate-500 text-[11px] sm:text-xs px-1">{itemQty}</td>
-                              <td className="py-2 text-right text-slate-500 text-[10px] sm:text-[11px] whitespace-nowrap px-1.5">{formatRupiah(itemPrice)}</td>
-                              <td className="py-2 text-right font-semibold text-slate-800 text-[11px] sm:text-xs whitespace-nowrap pl-1.5">{formatRupiah(itemTotal)}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-400 text-center py-4 border-t border-slate-100">Belum ada item barang</p>
-                )
+                <div className="overflow-x-auto border-t border-slate-100 px-3 py-3">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-slate-400 font-semibold border-b border-slate-100 text-[10px] uppercase">
+                        <th className="text-left py-2 font-bold pr-2">Nama Barang</th>
+                        <th className="text-center py-2 font-bold w-10 px-1">Qty</th>
+                        <th className="text-right py-2 font-bold whitespace-nowrap px-1.5">Harga</th>
+                        <th className="text-right py-2 font-bold whitespace-nowrap pl-1.5">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-slate-700">
+                      {getItemsForDisplay(receipt).map((norm: any, idx: number) => {
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-2 text-left font-medium text-[11px] sm:text-xs pr-2 break-words">{norm.namaBarang}</td>
+                            <td className="py-2 text-center text-slate-500 text-[11px] sm:text-xs px-1">{norm.qty}</td>
+                            <td className="py-2 text-right text-slate-500 text-[10px] sm:text-[11px] whitespace-nowrap px-1.5">{formatRupiah(norm.harga)}</td>
+                            <td className="py-2 text-right font-semibold text-slate-800 text-[11px] sm:text-xs whitespace-nowrap pl-1.5">{formatRupiah(norm.subtotal)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
 
               {/* Total */}
@@ -559,6 +688,8 @@ export function DetailView() {
                 <span className="font-mono text-[10px] tracking-widest text-slate-400">
                   {receipt.id.toUpperCase().slice(0, 16)}
                 </span>
+              </div>
+                </div>
               </div>
             </Card>
           </motion.div>
@@ -627,6 +758,17 @@ export function DetailView() {
                       className="rounded-xl h-10 border-slate-200 bg-slate-50 text-sm"
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                      <Phone className="h-3.5 w-3.5" /> No. Telepon Toko
+                    </Label>
+                    <Input
+                      value={editForm.noTelepon ?? ''}
+                      onChange={(e) => setEditForm((f) => ({ ...f, noTelepon: e.target.value }))}
+                      placeholder="Nomor telepon toko (opsional)"
+                      className="rounded-xl h-10 border-slate-200 bg-slate-50 text-sm"
+                    />
+                  </div>
                    <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                       <FileText className="h-3.5 w-3.5" /> Keterangan
@@ -670,16 +812,16 @@ export function DetailView() {
                     <span className="text-xs font-bold text-slate-900">{receipt.merchantName || receipt.namaToko || '-'}</span>
                   </div>
 
-                  {/* No. Nota — only show if valid */}
-                  {validInvoice && (
-                    <div className="flex items-center justify-between py-3">
-                      <span className="flex items-center gap-2 text-xs text-slate-500">
-                        <Hash className="h-3.5 w-3.5 text-blue-500" />
-                        No. Nota / Ref
-                      </span>
-                      <span className="text-xs font-mono font-semibold text-slate-800">{validInvoice}</span>
-                    </div>
-                  )}
+                  {/* No. Nota / Invoice */}
+                  <div className="flex items-center justify-between py-3">
+                    <span className="flex items-center gap-2 text-xs text-slate-500">
+                      <Hash className="h-3.5 w-3.5 text-blue-500" />
+                      No. Invoice / Nota
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-900">
+                      {receipt.receiptNumber && isValidInvoiceNumber(receipt.receiptNumber) ? receipt.receiptNumber : (receipt.invoiceNumber && isValidInvoiceNumber(receipt.invoiceNumber) ? receipt.invoiceNumber : '-')}
+                    </span>
+                  </div>
 
                   {/* Tanggal */}
                   <div className="flex items-center justify-between py-3">
@@ -689,6 +831,30 @@ export function DetailView() {
                     </span>
                     <span className="text-xs font-semibold text-slate-800">{formatDateID(receipt.transactionDate)}</span>
                   </div>
+
+                  {/* No Telepon Toko */}
+                  {receipt.noTelepon && (
+                    <div className="flex items-center justify-between py-3">
+                      <span className="flex items-center gap-2 text-xs text-slate-500">
+                        <Phone className="h-3.5 w-3.5 text-blue-500" />
+                        No. Telepon Toko
+                      </span>
+                      <span className="text-xs font-semibold text-slate-800">{receipt.noTelepon}</span>
+                    </div>
+                  )}
+
+                  {/* Subtotal */}
+                  {Boolean(receipt.subtotalNominal && receipt.subtotalNominal > 0) && (
+                    <div className="flex items-center justify-between py-3">
+                      <span className="flex items-center gap-2 text-xs text-slate-500">
+                        <Calculator className="h-3.5 w-3.5 text-blue-500" />
+                        Subtotal
+                      </span>
+                      <span className="text-xs font-semibold text-slate-800">
+                        {formatRupiah(receipt.subtotalNominal ?? 0)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Total Nominal */}
                   <div className="flex items-center justify-between py-3">
@@ -701,18 +867,19 @@ export function DetailView() {
                     </span>
                   </div>
 
-                  {/* Metode Pembayaran */}
-                  <div className="flex items-center justify-between py-3">
-                    <span className="flex items-center gap-2 text-xs text-slate-500">
-                      <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
-                      Metode Pembayaran
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
-                        {receipt.metodePembayaran || 'Digital'}
+                  {/* Biaya Layanan / Admin (jika ada) */}
+                  {Boolean(receipt.biayaTambahan && receipt.biayaTambahan > 0) && (
+                    <div className="flex items-center justify-between py-3">
+                      <span className="flex items-center gap-2 text-xs text-slate-500">
+                        <Tag className="h-3.5 w-3.5 text-blue-500" />
+                        {receipt.namaBiayaTambahan || 'Biaya Layanan / Admin'}
+                      </span>
+                      <span className="text-xs font-bold text-amber-600">
+                        {formatRupiah(receipt.biayaTambahan ?? 0)}
                       </span>
                     </div>
-                  </div>
+                  )}
+
 
                   {/* Keterangan Singkat */}
                   {receipt.description && (
@@ -724,34 +891,33 @@ export function DetailView() {
                     </div>
                   )}
 
-                  {/* Rincian Items Breakdown (If any items exist) */}
-                  {receipt.items && receipt.items.length > 0 && (
                     <div className="py-3.5 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                           <ShoppingBag className="h-3.5 w-3.5 text-blue-500" />
-                          Rincian Barang / Tagihan ({receipt.items.length})
+                          Rincian Barang / Tagihan ({getItemsForDisplay(receipt).length})
                         </span>
                       </div>
                       <div className="rounded-xl border border-slate-100 bg-slate-50/70 divide-y divide-slate-100 p-2.5 text-xs">
-                        {receipt.items.map((it: any, idx: number) => (
-                          <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
-                            <div className="min-w-0 pr-2">
-                              <span className="font-semibold text-slate-800 block truncate">
-                                {it.namaBarang || it.name}
-                              </span>
-                              <span className="text-[10.5px] text-slate-400">
-                                {it.qty || 1} × {formatRupiah(it.harga || it.price || 0)}
+                        {getItemsForDisplay(receipt).map((norm: any, idx: number) => {
+                          return (
+                            <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
+                              <div className="min-w-0 pr-2">
+                                <span className="font-semibold text-slate-800 block truncate">
+                                  {norm.namaBarang}
+                                </span>
+                                <span className="text-[10.5px] text-slate-400">
+                                  {norm.qty} × {formatRupiah(norm.harga)}
+                                </span>
+                              </div>
+                              <span className="font-bold text-slate-900 shrink-0 font-mono">
+                                {formatRupiah(norm.subtotal)}
                               </span>
                             </div>
-                            <span className="font-bold text-slate-900 shrink-0 font-mono">
-                              {formatRupiah(it.subtotal || (it.qty || 1) * (it.harga || 0))}
-                            </span>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
-                  )}
 
                   {/* Teks OCR Mentah — Collapsible Accordion (default closed) */}
                   {receipt.ocrText && (
@@ -770,8 +936,26 @@ export function DetailView() {
                       </button>
                       
                       {showOcr && (
-                        <div className="mt-2">
-                          <OcrTableEditor text={receipt.ocrText} isEditing={false} onChange={() => {}} />
+                        <div className="mt-2 space-y-2">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-[11px] font-semibold text-slate-500">Struktur Tabel OCR</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditing((v) => !v)}
+                              className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100"
+                            >
+                              <Pencil className="h-3 w-3" /> {isEditing ? 'Selesai Edit' : 'Edit & Hapus Baris OCR'}
+                            </button>
+                          </div>
+                          <OcrTableEditor
+                            text={receipt.ocrText || receipt.ocrRawText || ''}
+                            isEditing={isEditing}
+                            onChange={(updatedText) => {
+                              if (receipt) {
+                                setReceipt({ ...receipt, ocrText: updatedText, ocrRawText: updatedText })
+                              }
+                            }}
+                          />
                         </div>
                       )}
                     </div>
@@ -1036,6 +1220,13 @@ function parseDataRow(line: string, headerCols: string[]): string[] {
       nameStr = ''
     }
   }
+
+  // Clean item name from currency and price tokens (e.g. "Rp10.000 Biaya Layanan Rp" -> "Biaya Layanan")
+  nameStr = nameStr
+    .replace(/^(?:rp\.?\s*[\d.]*\s*)+/gi, '')
+    .replace(/(?:\s*rp\.?\s*[\d.]*)+$/gi, '')
+    .replace(/\b(?:rp|rupiah|jumlah|total|subtotal)\b/gi, '')
+    .trim()
 
   return [qtyStr, nameStr, priceStr || unitPriceStr]
 }
@@ -1430,7 +1621,7 @@ export function OcrTableEditor({
             <div key={bi} className="overflow-x-auto bg-white rounded-xl border border-slate-200 p-2 space-y-2">
               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 px-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tabel Barang (OCR)</span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <button
                     type="button"
                     onClick={() => {
@@ -1441,13 +1632,20 @@ export function OcrTableEditor({
                   >
                     + Tambah Baris
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteBlock(bi)}
+                    className="text-[10px] font-semibold text-rose-600 hover:text-rose-700 ml-2"
+                  >
+                    <Trash2 className="h-3 w-3 inline mr-0.5" /> Hapus Tabel
+                  </button>
                 </div>
               </div>
               <table className="w-full text-xs table-fixed">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
                     {block.headers.map((h, hi) => (
-                      <th key={hi} className={cn("py-1 px-1", hi === 1 || isTextCol(h) ? "w-[50%]" : hi === 2 ? "w-[30%]" : "w-[20%]")}>
+                      <th key={hi} className={cn("py-1 px-1", hi === 1 || isTextCol(h) ? "w-[45%]" : hi === 2 ? "w-[25%]" : "w-[20%]")}>
                         <Input
                           value={h}
                           onChange={(e) => {
@@ -1460,6 +1658,7 @@ export function OcrTableEditor({
                         />
                       </th>
                     ))}
+                    <th className="w-8 py-1 px-1"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -1468,7 +1667,7 @@ export function OcrTableEditor({
                       {block.headers.map((h, ci) => {
                         const cellValue = row[ci] || ''
                         return (
-                          <td key={ci} className={cn("py-1 px-1", ci === 1 || isTextCol(h) ? "w-[50%]" : ci === 2 ? "w-[30%]" : "w-[20%]")}>
+                          <td key={ci} className={cn("py-1 px-1", ci === 1 || isTextCol(h) ? "w-[45%]" : ci === 2 ? "w-[25%]" : "w-[20%]")}>
                             <Input
                               value={cellValue}
                               onChange={(e) => {
@@ -1485,6 +1684,19 @@ export function OcrTableEditor({
                           </td>
                         )
                       })}
+                      <td className="py-1 px-1 w-8 text-center">
+                        <button
+                          type="button"
+                          title="Hapus Baris Ini"
+                          onClick={() => {
+                            const nextRows = block.rows.filter((_, idx) => idx !== ri)
+                            updateBlock(bi, { ...block, rows: nextRows })
+                          }}
+                          className="h-7 w-7 inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1579,10 +1791,16 @@ function extractItemsFromOcrText(ocrText: string): any[] {
             totalVal = qty * priceVal
           }
           
-          if (nameStr && !invalidNames.has(nameStr.toUpperCase())) {
+          // Clean item name from Rp prefix/suffix (e.g. "Rp10.000 Biaya Layanan Rp" -> "Biaya Layanan")
+          const cleanedName = nameStr
+            .replace(/^(?:rp\.?\s*[\d.]*\s*)+/gi, '')
+            .replace(/(?:\s*rp\.?\s*[\d.]*)+$/gi, '')
+            .replace(/\b(?:rp|rupiah|jumlah|total|subtotal)\b/gi, '')
+            .trim()
+          if (cleanedName && cleanedName.length >= 2 && !invalidNames.has(cleanedName.toUpperCase())) {
             items.push({
-              namaBarang: nameStr,
-              name: nameStr,
+              namaBarang: cleanedName,
+              name: cleanedName,
               qty: qty,
               harga: priceVal,
               price: priceVal,
@@ -1614,11 +1832,17 @@ function extractItemsFromOcrText(ocrText: string): any[] {
     const m = line.match(/^(\d+)\s+(.+?)\s+([\d.]+)(?:\s+([\d.]+))?$/)
     if (m) {
       const qty = parseInt(m[1], 10)
-      const namaBarang = m[2].trim()
+      const rawName = m[2].trim()
+      // Clean item name from Rp prefix/suffix
+      const namaBarang = rawName
+        .replace(/^(?:rp\.?\s*[\d.]*\s*)+/gi, '')
+        .replace(/(?:\s*rp\.?\s*[\d.]*)+$/gi, '')
+        .replace(/\b(?:rp|rupiah|jumlah|total|subtotal)\b/gi, '')
+        .trim()
       const val1 = parseFloat(m[3].replace(/\./g, ''))
       const val2 = m[4] ? parseFloat(m[4].replace(/\./g, '')) : null
 
-      if (namaBarang && !invalidNames.has(namaBarang.toUpperCase()) && !isNaN(val1) && val1 > 0) {
+      if (namaBarang && namaBarang.length >= 2 && !invalidNames.has(namaBarang.toUpperCase()) && !isNaN(val1) && val1 > 0) {
         const subtotal = val2 !== null ? val2 : val1
         const harga = val2 !== null ? val1 : Math.round(subtotal / qty)
         items.push({

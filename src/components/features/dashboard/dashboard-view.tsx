@@ -195,10 +195,17 @@ export function DashboardView() {
     },
   ]
 
-  const formattedChartTotal = formatRupiah(statsData?.allTime?.total || 0)
-  const realChartData = (statsData?.chart && statsData.chart.length > 0)
-    ? statsData.chart
-    : [{ name: 'Hari ini', value: 0 }]
+  const [chartPeriod, setChartPeriod] = useState<'30days' | 'allTime'>('30days')
+
+  const formattedChartTotal = formatRupiah(
+    chartPeriod === '30days'
+      ? (statsData?.thirtyDaysTotal ?? 0)
+      : (statsData?.allTime?.total ?? 0)
+  )
+
+  const realChartData = chartPeriod === '30days'
+    ? ((statsData?.chart30Days && statsData.chart30Days.length > 0) ? statsData.chart30Days : statsData?.chart || [{ name: 'Hari ini', value: 0 }])
+    : (statsData?.chartMonthly && statsData.chartMonthly.length > 0 ? statsData.chartMonthly : [{ name: 'Jan', value: 0 }])
 
   return (
     <div className="w-full space-y-5 pb-16">
@@ -267,10 +274,34 @@ export function DashboardView() {
 
         {/* Total Transaksi Chart Card (Matching Mockup) */}
         <Card className="p-5 sm:p-6 border border-slate-100/80 dark:border-slate-800 shadow-2xs bg-white dark:bg-slate-900 rounded-3xl">
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                Total Transaksi <span className="text-xs font-normal text-slate-400 dark:text-slate-500">(30 Hari Terakhir)</span>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                Total Transaksi
+                <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[10px]">
+                  <button
+                    onClick={() => setChartPeriod('30days')}
+                    className={cn(
+                      'px-2.5 py-0.5 rounded-md font-semibold transition-colors',
+                      chartPeriod === '30days'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                    )}
+                  >
+                    30 Hari
+                  </button>
+                  <button
+                    onClick={() => setChartPeriod('allTime')}
+                    className={cn(
+                      'px-2.5 py-0.5 rounded-md font-semibold transition-colors',
+                      chartPeriod === 'allTime'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                    )}
+                  >
+                    Semua Waktu
+                  </button>
+                </div>
               </h3>
             </div>
             <div className="text-right">

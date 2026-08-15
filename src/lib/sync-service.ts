@@ -16,6 +16,7 @@
 
 import { localDb, type LocalReceipt, type SyncQueueEntry } from './local-db'
 import type { Receipt } from '@/types'
+import { isValidInvoiceNumber } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Online Status Detection
@@ -120,13 +121,11 @@ export async function saveReceiptOnlineFirst(
 ): Promise<SaveResult> {
   const receiptId = (payload.id as string) || crypto.randomUUID()
   const now = new Date().toISOString()
-  const namaToko = (payload.namaToko || payload.merchantName || 'Nota Belanja') as string
+  const namaToko = (payload.namaToko || payload.merchantName || '-') as string
   const tanggal = ((payload.tanggal || payload.transactionDate || now) as string).split('T')[0]
   const nominal = Number(payload.nominal ?? payload.total) || 0
-  const receiptNumber =
-    (payload.receiptNumber as string) ||
-    (payload.invoiceNumber as string) ||
-    `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
+  const rawNum = (payload.receiptNumber as string) || (payload.invoiceNumber as string) || ''
+  const receiptNumber = isValidInvoiceNumber(rawNum) ? rawNum.trim() : ''
 
   // Siapkan objek receipt standar
   const receiptObj: Receipt = {
@@ -144,7 +143,6 @@ export async function saveReceiptOnlineFirst(
     pajak: Number(payload.pajak) || 0,
     keterangan: (payload.keterangan || payload.description || null) as string | null,
     description: (payload.keterangan || payload.description || null) as string | null,
-    metodePembayaran: (payload.metodePembayaran || null) as string | null,
     imageUrl: (payload.imageUrl || null) as string | null,
     ocrRawText: (payload.ocrRawText || payload.ocrText || null) as string | null,
     ocrText: (payload.ocrRawText || payload.ocrText || null) as string | null,
@@ -239,7 +237,6 @@ async function upsertLocalCache(receipt: Receipt, synced: boolean): Promise<void
       nominal: Number(receipt.nominal ?? receipt.total) || 0,
       diskon: Number(receipt.diskon) || 0,
       pajak: Number(receipt.pajak) || 0,
-      metodePembayaran: receipt.metodePembayaran || null,
       keterangan: receipt.keterangan || receipt.description || null,
       statusOcr: (receipt.statusOcr || 'berhasil') as LocalReceipt['statusOcr'],
       ocrConfidence: Number(receipt.ocrConfidence ?? receipt.confidence) || null,
@@ -376,7 +373,6 @@ export async function syncAllUnsyncedReceipts(workspaceId: string = '00000000-00
           nominal: item.nominal,
           diskon: item.diskon || 0,
           pajak: item.pajak || 0,
-          metodePembayaran: item.metodePembayaran,
           keterangan: item.keterangan,
           imageUrl: item.imageUrl,
           ocrRawText: item.ocrRawText,

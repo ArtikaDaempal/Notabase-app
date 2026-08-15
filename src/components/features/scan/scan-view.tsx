@@ -32,8 +32,6 @@ import {
 import { toast } from 'sonner'
 import type { OcrResult } from '@/types'
 import { cn } from '@/lib/utils'
-import { saveReceiptOnlineFirst } from '@/lib/sync-service'
-import { DEFAULT_WORKSPACE_ID } from '@/lib/constants'
 import { SINGLE_TENANT_WORKSPACE } from '@/shared/config/workspace'
 import { preprocessForOcr } from '@/lib/image-preprocessor'
 import type { PreprocessResult } from '@/lib/image-preprocessor'
@@ -43,11 +41,13 @@ type Phase = 'preview' | 'captured' | 'preprocessing' | 'processing' | 'done'
 const PROGRESS_STEPS = [
   { key: 'preprocessing', label: 'Memproses gambar...', icon: Sparkles },
   { key: 'uploading', label: 'Mengunggah gambar...', icon: Camera },
-  { key: 'ocr', label: 'Menjalankan OCR AI...', icon: ScanLine },
+  { key: 'ocr', label: 'Mengenali teks...', icon: ScanLine },
+  { key: 'analyzing', label: 'Menganalisis struktur nota...', icon: FileText },
+  { key: 'extracting', label: 'Mengekstrak data...', icon: CheckCircle2 },
 ]
 
 export function ScanView() {
-  const { startOcrReview, setTab, goBack } = useAppStore()
+  const { startOcrReview, goBack, setTab } = useAppStore()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -281,7 +281,14 @@ export function ScanView() {
         const errData = await ocrRes.json().catch(() => ({}))
         throw new Error(errData.error || 'Gagal memproses OCR')
       }
+
+      // ── Step 4: Analyzing ─────────────────────────────────────────────────
+      setProgressStep('analyzing')
       const result: OcrResult = await ocrRes.json()
+
+      // ── Step 5: Extracting ────────────────────────────────────────────────
+      setProgressStep('extracting')
+      await new Promise((r) => setTimeout(r, 300)) // Brief visual pause
 
       // Check if the VLM detected the image as a valid receipt
       if (result.isReceipt === false) {
@@ -290,68 +297,11 @@ export function ScanView() {
         return
       }
 
-      // Smart auto-save: if all required fields are detected, save directly
-      const isFullyRead =
-        result.namaToko && result.namaToko.trim() !== '' &&
-        result.nominal && result.nominal > 0 &&
-        result.tanggal && result.tanggal.trim() !== ''
-
-      if (isFullyRead) {
-        const dateStr = result.tanggal
-          ? new Date(result.tanggal).toISOString().slice(0, 10)
-          : new Date().toISOString().slice(0, 10)
-
-        const workspaceId = SINGLE_TENANT_WORKSPACE.id
-        await saveReceiptOnlineFirst(
-          {
-            workspaceId,
-            invoiceNumber: result.invoiceNumber || null,
-            receiptNumber: result.receiptNumber || null,
-            merchantName: result.namaToko,
-            namaToko: result.namaToko,
-            transactionDate: dateStr,
-            tanggal: dateStr,
-            waktu: result.waktu || null,
-            total: result.nominal,
-            nominal: result.nominal,
-            diskon: result.diskon || 0,
-            pajak: result.pajak || 0,
-            biayaTambahan: result.biayaTambahan || 0,
-            metodePembayaran: result.metodePembayaran || null,
-            sumberDana: result.sumberDana || null,
-            description: result.keterangan || null,
-            keterangan: result.keterangan || null,
-            imageUrl: url,
-            ocrText: result.ocrRawText,
-            ocrRawText: result.ocrRawText,
-            confidence: result.confidence,
-            ocrConfidence: result.confidence,
-            status: 'verified',
-            statusOcr: 'berhasil',
-            items: result.items,
-          },
-          workspaceId
-        )
-
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('notabase_receipts_changed'))
-          window.dispatchEvent(new Event('receipts-updated'))
-          window.dispatchEvent(new Event('receipt-saved'))
-        }
-
-        toast.success('Berhasil')
-        setPhase('done')
-        setTimeout(() => { setTab('history') }, 600)
-        return
-      } else {
-        toast.info('Beberapa data nota tidak terbaca. Silakan lengkapi form di bawah.')
-      }
-
-      // Fallback: show manual review form with the processed image URL
+      // Always route through OCR Preview — user must review before saving
       setPhase('done')
       setTimeout(() => {
         startOcrReview(url, result)
-      }, 600)
+      }, 400)
     } catch (err: any) {
       console.error(err)
       toast.error(err.message || 'Gagal memproses OCR. Silakan coba lagi.')

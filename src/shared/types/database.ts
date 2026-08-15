@@ -107,10 +107,16 @@ export interface Database {
           receipt_template: string | null
           image_url: string | null
           tanggal: string
+          waktu: string | null
           nama_toko: string
+          alamat: string | null
           nominal: number
           diskon: number
           pajak: number
+          biaya_tambahan: number | null
+          no_telepon: string | null
+          subtotal_nominal: number | null
+          nama_biaya_tambahan: string | null
           metode_pembayaran: string | null
           keterangan: string | null
           status_ocr: StatusOcr | null
@@ -130,10 +136,16 @@ export interface Database {
           receipt_template?: string | null
           image_url?: string | null
           tanggal: string
+          waktu?: string | null
           nama_toko: string
+          alamat?: string | null
           nominal?: number
           diskon?: number
           pajak?: number
+          biaya_tambahan?: number | null
+          no_telepon?: string | null
+          subtotal_nominal?: number | null
+          nama_biaya_tambahan?: string | null
           metode_pembayaran?: string | null
           keterangan?: string | null
           status_ocr?: StatusOcr | null
@@ -153,10 +165,16 @@ export interface Database {
           receipt_template?: string | null
           image_url?: string | null
           tanggal?: string
+          waktu?: string | null
           nama_toko?: string
+          alamat?: string | null
           nominal?: number
           diskon?: number
           pajak?: number
+          biaya_tambahan?: number | null
+          no_telepon?: string | null
+          subtotal_nominal?: number | null
+          nama_biaya_tambahan?: string | null
           metode_pembayaran?: string | null
           keterangan?: string | null
           status_ocr?: StatusOcr | null

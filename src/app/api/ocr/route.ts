@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { readFile } from 'fs/promises'
 import path from 'path'
 import { db } from '@/lib/db'
@@ -171,22 +173,59 @@ function detectBankOrPaymentProvider(text: string): string | null {
 }
 
 function parseInvoice(text: string): string | null {
-  // Try reference number patterns common in bank receipts
-  const refPatterns = [
-    /\bno\.?\s*ref(?:erensi)?\.?\s*:?\s*([A-Z0-9]{8,24})\b/i,
-    /\bno\.?\s*transaksi\.?\s*:?\s*([A-Z0-9]{8,24})\b/i,
-    /\breference\s*(?:no|number)\.?\s*:?\s*([A-Z0-9]{8,24})\b/i,
-    /\b(?:inv|invoice|nota|no)\b[.\s:]*(#?\s*[A-Z0-9\-\/]{4,})/i,
+  if (!text) return null
+
+  // Helper: given a raw matched string, strip spaces and validate
+  const clean = (raw: string): string | null => {
+    // Remove leading/trailing junk, collapse internal spaces (OCR splits like "INV7380... 89")
+    const c = raw.replace(/^[#:\s]+/, '').replace(/\s+/g, '').trim()
+    return isValidInvoiceNumber(c) ? c : null
+  }
+
+  // Labeled patterns — allow optional spaces inside the captured number for OCR splits
+  const labeledPatterns: RegExp[] = [
+    /\bno\.?\s*invoice\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\binvoice\s*(?:no|number|num|nomor)\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bnomor\s*(?:invoice|nota|faktur|kwitansi|transaksi)\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*nota\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*faktur\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*kwitansi\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{4,50})/i,
+    /\bno\.?\s*ref(?:erensi)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\bno\.?\s*transaksi\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\breference\s*(?:no|number|num)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\btrx\s*(?:id|no|ref)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
+    /\border\s*(?:id|no|ref)?\.?\s*[:\s]\s*([A-Z0-9][A-Z0-9\s\-\/]{5,50})/i,
   ]
-  for (const p of refPatterns) {
+
+  // Try labeled patterns first (most reliable)
+  for (const p of labeledPatterns) {
     const m = text.match(p)
-    if (m) {
-      const candidate = m[1].replace(/^#?\s*/, '').trim()
-      if (isValidInvoiceNumber(candidate)) {
-        return candidate
-      }
+    if (m && m[1]) {
+      // Only take the first "word token" group (stop at newline or long whitespace)
+      // OCR splits like "INV7380965045259999 89" — grab until non-invoice char
+      const rawCapture = m[1].split(/\n/)[0].trim()
+      // Allow up to one internal space (OCR split of a single long number)
+      const result = clean(rawCapture)
+      if (result) return result
     }
   }
+
+  // Standalone prefix patterns — catch "INV738096..." anywhere in text
+  const prefixPatterns: RegExp[] = [
+    /\b(INV[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+    /\b(TRX[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+    /\b(ORD[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+    /\b(REF[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+    /\b(NTB[A-Z0-9]{5,}\s?[A-Z0-9]{0,10})\b/i,
+  ]
+  for (const p of prefixPatterns) {
+    const m = text.match(p)
+    if (m && m[1]) {
+      const result = clean(m[1])
+      if (result) return result
+    }
+  }
+
   return null
 }
 
@@ -291,11 +330,80 @@ function parseItems(text: string): ReceiptItem[] {
           price: subtotal,
           total: subtotal,
         })
-        continue
       }
     }
   }
   return items
+}
+
+function sanitizeItems(rawItems: any[], totalNominal: number): ReceiptItem[] {
+  const invalidNames = new Set([
+    'BANYAKNYA', 'NAMA BARANG', 'HARGA', 'TOTAL', 'SUBTOTAL', 'GRAND TOTAL',
+    'QTY', 'ITEM', 'JUMLAH', 'BAYAR', 'KEMBALI', 'KASIR', 'TANGGAL', 'NOTA',
+    'TANDA TERIMA', 'HORMAT KAMI', 'TERIMA KASIH', 'STAMP', 'CAP', 'PEMBELIAN'
+  ])
+
+  const sanitized: ReceiptItem[] = []
+
+  rawItems.forEach((it: any, idx: number) => {
+    let name = String(it.namaBarang ?? it.name ?? '').trim()
+
+    // 1. Clean item name of price tokens, currency prefixes/suffixes (e.g. "Rp10.000 Biaya Layanan Rp" -> "Biaya Layanan")
+    name = name
+      .replace(/^(?:rp\.?\s*[\d.]*\s*)+/gi, '')
+      .replace(/(?:\s*rp\.?\s*[\d.]*)+$/gi, '')
+      .replace(/\s+\d+[\d.\s]*\s*(?:jumlah|rp|total|subtotal)?$/i, '')
+      .replace(/\s+(?:jumlah|rp|total|subtotal)\.?$/i, '')
+      .replace(/\b(?:rp|rupiah)\b/gi, '')
+      .trim()
+
+    // Skip bogus or header items
+    const upperName = name.toUpperCase()
+    if (!name || name.length < 2 || invalidNames.has(upperName) || /^(tanda|hormat|terima|total|subtotal|jumlah\s*rp|bayar|kembali|cash|stamp)$/i.test(name)) {
+      return
+    }
+
+    let qty = Math.max(1, Math.round(Number(it.qty ?? 1)))
+    let harga = Number(it.harga ?? it.price ?? 0)
+    let subtotal = Number(it.subtotal ?? it.total ?? 0)
+
+    // 2. Resolve Column Confusion:
+    // If AI confused column 4 (JUMLAH line total e.g. 160000) with column 3 (HARGA unit price e.g. 40000)
+    if (qty > 1) {
+      if (harga > 0 && (harga === subtotal || Math.abs(harga * qty - subtotal) > subtotal * 0.5)) {
+        if (harga === subtotal) {
+          // harga was actually line total (e.g. 160000). Real unit price is 160000 / 4 = 40000!
+          harga = Math.round(subtotal / qty)
+        } else if (subtotal === qty * harga && totalNominal > 0 && subtotal > totalNominal) {
+          // subtotal (640000) was inflated because harga was set to line total (160000)!
+          subtotal = harga
+          harga = Math.round(subtotal / qty)
+        } else if (subtotal > 0 && Math.abs(harga * qty - subtotal) > 10) {
+          harga = Math.round(subtotal / qty)
+        }
+      }
+    }
+
+    // Default calculations if 0
+    if (subtotal === 0 && harga > 0) {
+      subtotal = qty * harga
+    } else if (harga === 0 && subtotal > 0) {
+      harga = Math.round(subtotal / qty)
+    }
+
+    sanitized.push({
+      namaBarang: name,
+      qty,
+      harga,
+      subtotal,
+      urutan: idx,
+      name,
+      price: harga,
+      total: subtotal,
+    })
+  })
+
+  return sanitized
 }
 
 // POST /api/ocr — analyze a receipt image using Gemini API directly
@@ -372,66 +480,213 @@ export async function POST(req: NextRequest) {
   }
 
   // Prompt Gemini — field names sesuai skema Notabase v2 (04-database-schema.md)
-  const prompt = `Kamu adalah sistem AI OCR presisi tinggi khusus membaca:
-- Struk fisik toko/warung/percetakan
-- Nota tulisan tangan
-- Faktur/kuitansi/invoice
-- Screenshot aplikasi mobile banking: Livin by Mandiri, BCA Mobile, BRImo, BSI Mobile, BNI Mobile
-- Screenshot aplikasi e-wallet: DANA, GoPay, OVO, ShopeePay, LinkAja
-- Screenshot Bukti Transaksi Bukalapak, Tokopedia, Shopee, Indihome, Telkom, PLN, BPJS
+  const prompt = `Kamu adalah sistem AI OCR presisi dan akurasi tinggi khusus membaca nota transaksi Indonesia. Kamu harus mampu memproses:
+- Nota tulisan tangan di kertas polos / bergaris (kolom Banyaknya, Nama Barang, Harga, Jumlah)
+- Struk kasir thermal minimarket (Indomaret, Alfamart) — header besar, barcode, kode produk, nama barang, harga
+- Struk supermarket dengan banyak item
+- Nota restoran — item, modifier, service charge, pajak restoran
+- Struk toko kelontong, warung, percetakan, toko umum
+- Struk kasir thermal yang pudar / kontras rendah
+- Nota dengan cap/stempel toko yang menimpa sebagian tulisan
+- Faktur, kuitansi, invoice resmi
+- Screenshot e-wallet & mobile banking (BCA, Mandiri, BRI, BNI, GoPay, DANA, OVO, ShopeePay, Bukalapak, Tokopedia)
+- Nota dengan 1 barang maupun 50+ barang
+- Nota dengan atau tanpa alamat toko
+- Nota dengan atau tanpa nomor telepon
+- Nota dengan atau tanpa pajak
+- Nota dengan atau tanpa diskon
+- Nota dengan atau tanpa biaya tambahan
 
 Prioritas Bahasa Utama: ${langDesc}
 Ekstraksi Rincian Barang: ${ocrExtractItems ? 'Aktif' : 'Nonaktif'}
 
-Tugas:
-1. Analisis apakah dokumen adalah nota/struk/bukti pembayaran yang VALID. Jika TIDAK (foto wajah, pemandangan, KTP, dokumen random), set isReceipt: false.
+========================================
+ATURAN IDENTIFIKASI FIELD NOTA
+========================================
 
-2. Jika VALID, ekstraksi ke JSON berikut:
+1. NAMA TOKO:
+   - Biasanya ada di bagian ATAS nota (header)
+   - Bisa berupa logo yang tertulis atau teks besar di baris pertama
+   - JANGAN ambil nama kasir, alamat, slogan, atau nomor telepon sebagai nama toko
+   - Jika tidak ada nama toko yang jelas, set null
 
+2. ALAMAT TOKO:
+   - Biasanya di bawah nama toko, berupa jalan/kelurahan/kota
+   - Contoh: "Jl. Merdeka No. 10, Jakarta"
+   - Jika tidak ada, set null — JANGAN MENGARANG
+
+3. NOMOR TELEPON TOKO (noTelepon):
+   - Cari label: "Telp.", "Tel.", "Telepon:", "Phone:", "HP:", "No. HP"
+   - Format: 08xxxx, +628xxxx, (0xx) xxxx
+   - PENTING: JANGAN gunakan nomor nota/referensi/order sebagai nomor telepon
+   - PENTING: Nomor telepon biasanya 10-13 digit diawali 0 atau +62
+   - Jika tidak ada, set null — JANGAN MENGARANG
+
+4. NOMOR NOTA (receiptNumber):
+   - Cari label: "No. Nota", "No. Invoice", "No. Faktur", "No. Ref", "No. Transaksi", "Invoice No.", "Order ID", "Receipt No", "Bill No"
+   - JANGAN ambil nomor telepon sebagai nomor nota
+   - Jika tidak ada label tersebut, set null
+
+5. TANGGAL:
+   - Format bervariasi: 15/08/2026, 15-08-2026, 15.08.2026, 15 AUG 2026, 15 AGU 2026
+   - Normalisasi ke format YYYY-MM-DD
+   - JIKA TIDAK DITEMUKAN, set null — JANGAN MENGGUNAKAN TANGGAL HARI INI
+
+6. WAKTU:
+   - Format: HH:MM atau HH:MM:SS
+   - Jika tidak ada, set null
+
+========================================
+ATURAN DAFTAR BARANG
+========================================
+
+Format nota bervariasi, tangani semua format berikut:
+
+Format A (Minimarket/Supermarket): Nama+Kode | Harga
+  INDOMIE GRG AYAM    Rp  3.500
+  → qty: 1, harga: 3500, subtotal: 3500
+
+Format B (Qty x Harga = Subtotal):
+  INDOMIE GORENG   2 x 3.500   7.000
+  → qty: 2, harga: 3500, subtotal: 7000
+
+Format C (Nota tulisan tangan 4 kolom: Qty | Nama Barang | Harga Satuan | Jumlah):
+  4 | Nasi Paket ayam | 40.000 | 160.000
+  → qty: 4, harga: 40000, subtotal: 160000
+
+Format D (Qty + Nama + Total tanpa harga satuan):
+  2 Aqua Botol     4.000
+  → qty: 2, subtotal: 4000, harga: 2000 (dihitung)
+
+Format E (Item + Total saja, qty = 1):
+  Roti Tawar       8.000
+  → qty: 1, harga: 8000, subtotal: 8000
+
+ATURAN WAJIB DAFTAR BARANG:
+1. "harga" = HARGA SATUAN per 1 item (bukan total baris)
+2. "subtotal" = qty × harga (jumlah per baris)
+3. "namaBarang" = nama barang SAJA, jangan campur dengan harga, kode produk, atau angka dari kolom lain
+4. Nama barang multi-kata HARUS dipertahankan utuh: "INDOMIE GORENG SPECIAL" bukan "INDOMIE" saja
+5. JANGAN batasi jumlah barang — ekstrak SEMUA barang yang ada
+6. JANGAN masukkan baris TOTAL, SUBTOTAL, GRAND TOTAL, TANDA TERIMA, HORMAT KAMI, TERIMA KASIH sebagai barang
+7. Jika qty tidak tercantum eksplisit, gunakan qty = 1
+
+========================================
+ATURAN RINGKASAN TRANSAKSI
+========================================
+
+1. SUBTOTAL (subtotalNominal):
+   - Nilai sebelum diskon, pajak, dan biaya tambahan
+   - Label: "Subtotal", "Sub Total", "Jumlah"
+   - Jika tidak ada label subtotal terpisah, bisa dihitung dari sum(item.subtotal)
+   - Jika tidak jelas, set null
+
+2. DISKON:
+   - Label: "Diskon", "Discount", "Potongan"
+   - Bisa berupa nominal (Rp) atau persentase (%)
+   - Jika tidak ada, set 0 (JANGAN mengarang diskon)
+
+3. PAJAK:
+   - Label: "PPN", "Pajak", "Tax"
+   - Bisa berupa nominal atau persentase
+   - Jika tidak ada, set 0 (JANGAN mengarang pajak)
+
+4. BIAYA TAMBAHAN (biayaTambahan):
+   - Label: "Service Charge", "Biaya Layanan", "Biaya Admin", "Admin Fee", "Payment Fee"
+   - Simpan juga NAMA biaya tambahan tersebut di field "namaBiayaTambahan"
+   - Jika tidak ada, set 0 dan namaBiayaTambahan: null
+
+5. TOTAL / NOMINAL:
+   - Label: "TOTAL", "GRAND TOTAL", "Total Pembayaran", "Jumlah Bayar"
+   - Ini adalah nilai AKHIR yang dibayar pelanggan
+   - JANGAN salah ambil harga barang sebagai total
+
+6. METODE PEMBAYARAN:
+   - Label: "Tunai", "Cash", "Kartu", "Debit", "Kredit", "QRIS", "Transfer"
+   - Jika tidak ada, set null
+
+========================================
+KETERANGAN TAMBAHAN
+========================================
+- Informasi kasir, nama kasir, promosi, kode member dll → simpan di field "keterangan"
+- JANGAN masukkan informasi yang tidak berhubungan dengan transaksi
+
+========================================
+CONTOH OUTPUT YANG BENAR
+========================================
+
+Input nota:
+  TOKO ABC
+  Jl. Merdeka No. 10
+  Telp. 08123456789
+  No: 00125
+  Tanggal: 15/08/2026  15:30
+  INDOMIE GORENG   2 x 3.500   7.000
+  AQUA 600ML       1 x 4.000   4.000
+  ROTI             1 x 8.000   8.000
+  Subtotal: 19.000
+  Diskon:    2.000
+  Pajak:     1.870
+  Service:   1.000
+  TOTAL:    19.870
+  Tunai
+
+Output JSON:
 {
   "isReceipt": true,
-  "namaToko": "WAJIB diisi. Nama merchant/toko/mitra/penyedia jasa. JANGAN isi dengan 'Tidak Terbaca'",
-  "alamat": "Alamat toko/merchant jika tercantum, atau null",
-  "noTelepon": "Nomor telepon toko/merchant jika ada, atau null",
-  "tanggal": "YYYY-MM-DD — WAJIB format ini. Contoh: 15 JUL 2026 -> 2026-07-15",
-  "waktu": "Jam transaksi format HH:MM jika ada (contoh: '14:30'), atau null",
-  "nominal": "HANYA nominal total akhir pembayaran sebagai INTEGER tanpa titik/koma/Rp. JANGAN masukkan nomor referensi sebagai nominal",
-  "diskon": "Nominal diskon dalam Rupiah sebagai INTEGER (0 jika tidak ada)",
-  "diskonPersen": "Persentase diskon (0-100) sebagai NUMBER (0 jika tidak ada)",
-  "pajak": "Nominal pajak/PPN dalam Rupiah sebagai INTEGER (0 jika tidak ada)",
-  "pajakPersen": "Persentase pajak (0-100) sebagai NUMBER (0 jika tidak ada)",
-  "biayaTambahan": "Biaya admin/transaksi/layanan tambahan dalam Rupiah sebagai INTEGER (0 jika tidak ada)",
-  "metodePembayaran": "Metode pembayaran (misal: 'Tunai', 'Transfer Bank Mandiri', 'GoPay', 'DANA')",
-  "sumberDana": "Rekening/kartu/wallet sumber dana jika tercantum, atau null",
-  "receiptNumber": "No. Referensi / No. Transaksi / No. Nota yang tertera, atau null",
-  "keterangan": "Deskripsi singkat transaksi",
-  "items": ${ocrExtractItems ? `[
-    {
-      "namaBarang": "Nama barang/jasa/layanan yang dibayarkan",
-      "qty": 1,
-      "harga": 125000,
-      "subtotal": 125000,
-      "keterangan": "Catatan per-item jika ada, atau null"
-    }
-  ]` : `[]`},
-  "fieldConfidences": {
-    "namaToko": 95,
-    "tanggal": 90,
-    "nominal": 85,
-    "items": 80
-  },
-  "ocrRawText": "SALIN SELURUH teks dari gambar dari atas ke bawah, lengkap tanpa ada yang terlewat."
+  "namaToko": "TOKO ABC",
+  "alamat": "Jl. Merdeka No. 10",
+  "noTelepon": "08123456789",
+  "receiptNumber": "00125",
+  "tanggal": "2026-08-15",
+  "waktu": "15:30",
+  "subtotalNominal": 19000,
+  "diskon": 2000,
+  "pajak": 1870,
+  "biayaTambahan": 1000,
+  "namaBiayaTambahan": "Service",
+  "nominal": 19870,
+  "metodePembayaran": "Tunai",
+  "keterangan": null,
+  "items": [
+    { "namaBarang": "INDOMIE GORENG", "qty": 2, "harga": 3500, "subtotal": 7000 },
+    { "namaBarang": "AQUA 600ML", "qty": 1, "harga": 4000, "subtotal": 4000 },
+    { "namaBarang": "ROTI", "qty": 1, "harga": 8000, "subtotal": 8000 }
+  ],
+  "ocrRawText": "..."
 }
 
-Aturan KRITIS:
-- ${itemsInstruction}
-- nominal WAJIB integer murni tanpa separator. Salah: "125.000" Benar: 125000
-- nominal HANYA total akhir yang dibayar. JANGAN ambil nomor referensi 16-20 digit atau no pelanggan sebagai nominal
-- tanggal WAJIB format YYYY-MM-DD
-- namaToko WAJIB diisi, JANGAN kosong atau 'Tidak Terbaca'
-- fieldConfidences: berikan skor keyakinan 0-100 untuk setiap field utama yang kamu isi
-- Untuk screenshot Bukalapak / Tokopedia / Shopee / Livin: namaToko = nama instansi/tujuan transaksi + platform
-- Keluarkan HANYA JSON mentah yang valid tanpa pembungkus markdown atau backtick.`
+========================================
+TUGAS
+========================================
+1. Analisis apakah dokumen adalah nota/struk/bukti pembayaran yang VALID. Jika TIDAK, set isReceipt: false.
+2. Ekstraksi SELURUH data ke JSON sesuai struktur di bawah ini tanpa pembungkus markdown.
+3. JANGAN mengarang data yang tidak ada. Gunakan null untuk field yang tidak ditemukan.
+
+Struktur JSON WAJIB:
+{
+  "isReceipt": true/false,
+  "namaToko": "string atau null",
+  "alamat": "string atau null",
+  "noTelepon": "string atau null",
+  "receiptNumber": "string atau null",
+  "tanggal": "YYYY-MM-DD atau null — JANGAN ISI DENGAN TANGGAL HARI INI JIKA TIDAK ADA",
+  "waktu": "HH:MM atau null",
+  "subtotalNominal": angka_atau_null,
+  "diskon": angka_atau_0,
+  "diskonPersen": angka_persen_atau_0,
+  "pajak": angka_atau_0,
+  "pajakPersen": angka_persen_atau_0,
+  "biayaTambahan": angka_atau_0,
+  "namaBiayaTambahan": "string atau null",
+  "nominal": angka_total_akhir,
+  "metodePembayaran": "string atau null",
+  "keterangan": "string atau null",
+  "items": [
+    { "namaBarang": "nama lengkap barang", "qty": angka, "harga": angka_satuan, "subtotal": angka_total_baris, "keterangan": null }
+  ],
+  "ocrRawText": "Seluruh teks OCR mentah dari dokumen"
+}`
 
   try {
     // Parse mimeType and base64 from dataUrl
@@ -585,49 +840,41 @@ Aturan KRITIS:
     const detectedNamaToko = namaToko || detectBankOrPaymentProvider(ocrRawText) || 'Tidak Terbaca'
     console.log(`[OCR] Gemini namaToko: "${geminiNamaToko}" → final: "${detectedNamaToko}"`)
 
-    // Tanggal: ambil dari parsed, fallback ke regex parser, fallback ke hari ini
+    // Tanggal: ambil dari parsed, fallback ke regex parser, fallback ke null (JANGAN pakai tanggal hari ini)
     // Format output: YYYY-MM-DD (04-database-schema.md §2: tanggal adalah DATE)
-    let tanggal: string = norm.tanggal || norm.transactiondate || null
+    let tanggal: string | null = norm.tanggal || norm.transactiondate || null
     if (tanggal && tanggal.includes('T')) tanggal = tanggal.split('T')[0]  // strip time if ISO
-    if (!tanggal) tanggal = parseDate(ocrRawText) ?? new Date().toISOString().split('T')[0]
+    if (!tanggal) tanggal = parseDate(ocrRawText) ?? null  // null jika tidak ditemukan, bukan tanggal hari ini
 
     let nominal = Number(norm.nominal ?? norm.total) || 0
     // Guard: jangan pakai nomor referensi (>= 10 digit) sebagai nominal
     if (nominal >= 10_000_000_000) nominal = 0
     if (!nominal) nominal = parseTotalSmart(ocrRawText)
 
-    // Extracted receipt number — validate using isValidInvoiceNumber so trash values are discarded
-    // If Gemini returns empty string for receiptNumber, accept it (no invoice number)
-    const rawNumber: string | null = norm.receiptnumber || norm.invoicenumber || parseInvoice(ocrRawText)
-    const receiptNumber = rawNumber && isValidInvoiceNumber(rawNumber) ? rawNumber.trim() : null
+    // Extracted receipt number — prioritize Gemini's answer, fall back to regex parseInvoice
+    // If Gemini returns empty/null for receiptNumber, also try regex on the raw OCR text
+    const geminiReceiptNum: string = (norm.receiptnumber || norm.invoicenumber || norm.ordernumber || norm.orderid || norm.trxid || '').trim()
+    const regexReceiptNum = parseInvoice(ocrRawText)
+    const rawNumber = (geminiReceiptNum && isValidInvoiceNumber(geminiReceiptNum))
+      ? geminiReceiptNum
+      : (regexReceiptNum && isValidInvoiceNumber(regexReceiptNum) ? regexReceiptNum : null)
+    const receiptNumber = rawNumber ? rawNumber.trim() : null
 
-    const rawAlamat: string | null = norm.alamat || norm.merchantaddress || extractAddressFromOcr(ocrRawText) || null
+    const rawAlamat: string | null = norm.alamat || norm.merchantaddress || null
     const alamat = rawAlamat && isValidAddress(rawAlamat) ? rawAlamat.trim() : null
 
-    const rawNoTelepon: string | null = norm.notelepon || norm.merchantphone || norm.phone || extractPhoneFromOcr(ocrRawText) || null
-    const noTelepon = rawNoTelepon && isValidPhone(rawNoTelepon) ? rawNoTelepon.trim() : null
+    // No. Telepon toko — cari dari field khusus atau dari teks OCR jika ada label Telp/Phone
+    const rawNoTelepon: string | null = norm.notelepon || norm.telepon || norm.phone || norm.merchantphone || null
+    const noTelepon = rawNoTelepon && isValidPhone(rawNoTelepon)
+      ? rawNoTelepon.trim()
+      : (extractPhoneFromOcr(ocrRawText) || null)
 
     const keterangan: string | null = norm.keterangan || norm.description || null
-    const metodePembayaran: string | null = norm.metodepembayaran || norm.paymentmethod || null
 
-    // Normalisasi items ke skema baru
+    // Normalisasi items & pembersihan kesalahan pemetaan kolom AI
     const rawItems = Array.isArray(parsed.items) ? parsed.items : []
     const items: ReceiptItem[] = rawItems.length > 0
-      ? rawItems.map((it: any, idx: number) => {
-          const harga = Number(it.harga ?? it.price ?? 0)
-          const qty = Number(it.qty ?? 1)
-          return {
-            namaBarang: String(it.namaBarang ?? it.name ?? ''),
-            qty,
-            harga,
-            subtotal: Number(it.subtotal ?? it.total ?? qty * harga),
-            urutan: idx,
-            // backward compat aliases
-            name: String(it.namaBarang ?? it.name ?? ''),
-            price: harga,
-            total: Number(it.subtotal ?? it.total ?? qty * harga),
-          }
-        })
+      ? sanitizeItems(rawItems, nominal)
       : parseItems(ocrRawText)
 
     // Confidence heuristic (BR-OCR-03/04/05)
@@ -639,14 +886,27 @@ Aturan KRITIS:
     if (items.length > 0) confidence += 5
     confidence = Math.min(98, confidence)
 
-    // Extract new fields
+    // Extract all fields
     const waktu: string | null = typeof norm.waktu === 'string' && norm.waktu.match(/^\d{1,2}:\d{2}/) ? norm.waktu : null
     const diskon = Number(norm.diskon) || 0
     const diskonPersen = Number(norm.diskonpersen || norm.diskonfloat) || 0
     const pajak = Number(norm.pajak) || 0
     const pajakPersen = Number(norm.pajakpersen || norm.pajakfloat) || 0
-    const biayaTambahan = Number(norm.biayaditambahkan || norm.biayaditambah || norm.biayadmin || norm.biayatambahan || norm.fee) || 0
-    const sumberDana: string | null = typeof norm.sumberdana === 'string' && norm.sumberdana.trim() ? norm.sumberdana.trim() : null
+    const biayaTambahan = Number(
+      norm.biayaditambahkan || norm.biayaditambah || norm.biayatambahan ||
+      norm.biayadmin || norm.biayalayanan || norm.biayaadmin ||
+      norm.paymentfee || norm.servicefee || norm.adminfee ||
+      norm.fee || norm.layanan || 0
+    ) || 0
+    const namaBiayaTambahan: string | null = typeof (norm.namabiayatambahan || norm.servicecharge || norm.feelabel) === 'string'
+      ? (norm.namabiayatambahan || norm.servicecharge || norm.feelabel).trim() || null
+      : null
+    // Subtotal sebelum diskon/pajak/biaya
+    const subtotalNominal: number | undefined = norm.subtotalnominal != null
+      ? Number(norm.subtotalnominal) || undefined
+      : (items.length > 0
+        ? items.reduce((s, it) => s + (Number(it.subtotal) || 0), 0) || undefined
+        : undefined)
 
     // Field-level confidences from Gemini (or default heuristics)
     const rawFc = norm.fieldconfidences || norm.field_confidences || {}
@@ -669,14 +929,15 @@ Aturan KRITIS:
       tanggal,
       waktu,
       nominal,
+      subtotalNominal,
       diskon,
       diskonPersen,
       pajak,
       pajakPersen,
       biayaTambahan,
-      metodePembayaran,
-      sumberDana,
+      namaBiayaTambahan,
       receiptNumber,
+      metodePembayaran: norm.metodepembayaran || norm.paymentmethod || null,
       keterangan,
       items,
       ocrRawText,
@@ -687,7 +948,6 @@ Aturan KRITIS:
       merchantName: detectedNamaToko,
       merchantAddress: alamat,
       merchantPhone: noTelepon,
-      phone: noTelepon,
       transactionDate: tanggal,
       total: nominal,
       invoiceNumber: receiptNumber,

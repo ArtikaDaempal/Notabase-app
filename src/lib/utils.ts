@@ -147,7 +147,7 @@ export function startOfMonth(d: Date = new Date()): Date {
   return x
 }
 
-/** Validate if an invoice number string is genuine (not an OCR header artifact like BANYAKNYA or fake generated ID) */
+/** Validate if an invoice number string is genuine (not an OCR header artifact like BANYAKNYA) */
 export function isValidInvoiceNumber(num?: string | null): boolean {
   if (!num) return false
   const s = String(num).trim().toUpperCase()
@@ -158,13 +158,9 @@ export function isValidInvoiceNumber(num?: string | null): boolean {
     s === 'UNDEFINED' ||
     s.startsWith('TEMP-') ||
     s.startsWith('INV-TEMP-') ||
-    s.startsWith('TEMP-INV-')
+    s.startsWith('TEMP-INV-') ||
+    /^INV-\d{8}-[A-F0-9]{4,}$/i.test(s)
   ) {
-    return false
-  }
-
-  // Reject auto-generated fake fallback IDs (e.g. INV-20260620-2266, INV-139bb414-4dc4-..., etc.)
-  if (/^INV-\d{8}-[A-F0-9]{4,6}$/i.test(s) || /^INV-[A-F0-9]{8,12}$/i.test(s) || /^INV-[A-F0-9-]{16,}$/i.test(s)) {
     return false
   }
 
@@ -174,16 +170,11 @@ export function isValidInvoiceNumber(num?: string | null): boolean {
     'NOMINAL', 'MINAL', 'BANYAK', 'QTY', 'NO', 'NAMA_BARANG', 'HARGA_SATUAN', 'JUMLAH_HARGA',
     'NO_URUT', 'NAMA_ITEM', 'BARANG', 'KETERANGAN', 'URAIAN', 'DISKON', 'PAJAK', 'PPN'
   ]
-  if (invalidKeywords.some((kw) => s === kw || s.startsWith(kw + ' ') || s.endsWith(' ' + kw) || s.startsWith(kw + ':') || s.startsWith(kw + '.'))) {
+  if (invalidKeywords.some((kw) => s === kw)) {
     return false
   }
 
-  // Real invoice number should have at least one digit
-  if (!/\d/.test(s)) {
-    return false
-  }
-
-  return true
+  return s.length >= 3
 }
 
 /** Validate if a string is a valid address (not a table item row or customer name) */
@@ -328,4 +319,138 @@ function isSameMonth(start: string, end: string): boolean {
   const e = new Date(end)
   if (isNaN(s.getTime()) || isNaN(e.getTime())) return false
   return s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()
+}
+
+export interface NormalizedItem {
+  namaBarang: string
+  qty: number
+  harga: number
+  subtotal: number
+  name: string
+  price: number
+  total: number
+  urutan: number
+}
+
+/**
+ * Universal item math normalizer for individual items across the application.
+ * Cleans name artifacts (e.g. "Air mineral 5000 20.000 Jumlah" -> "Air mineral")
+ * and resolves single-item column confusion.
+ */
+export function normalizeReceiptItem(it: any, idx?: number): NormalizedItem {
+  let name = String(it?.namaBarang ?? it?.name ?? '').trim()
+
+  // Clean numbers/keywords off item name (e.g. "Air mineral 5000 20.000 Jumlah" -> "Air mineral")
+  name = name
+    .replace(/\b\d{1,3}(?:\.\d{3})+\b/g, '') // remove 20.000, 160.000, 1.500.000
+    .replace(/\b\d{4,}\b/g, '') // remove standalone prices >= 1000 like 5000
+    .replace(/\b(?:jumlah|rp|total|subtotal|banyaknya|harga|rp\.|pembelian)\b/gi, '') // remove price keywords
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!name || name.length < 2) name = 'Item'
+
+  let qty = Math.max(1, Math.round(Number(it?.qty ?? 1)))
+  let harga = Math.max(0, Math.round(Number(it?.harga ?? it?.price ?? 0)))
+  let subtotal = Math.max(0, Math.round(Number(it?.subtotal ?? it?.total ?? 0)))
+
+  // MATH RECONCILIATION FOR ALL NOTA:
+  if (qty > 1) {
+    // Case 1: harga === subtotal (e.g. qty=4, harga=160000, subtotal=160000)
+    if (harga > 0 && subtotal > 0 && harga === subtotal) {
+      harga = Math.round(subtotal / qty)
+    }
+    // Case 2: harga was set to subtotal and subtotal was inflated to qty * harga (e.g. qty=4, harga=160000, subtotal=640000)
+    else if (harga > 0 && subtotal > 0 && Math.abs(harga * qty - subtotal) < 2) {
+      subtotal = harga
+      harga = Math.round(subtotal / qty)
+    }
+    // Case 3: subtotal missing or zero
+    else if (subtotal === 0 && harga > 0) {
+      subtotal = qty * harga
+    }
+    // Case 4: harga missing or zero
+    else if (harga === 0 && subtotal > 0) {
+      harga = Math.round(subtotal / qty)
+    }
+    // Case 5: harga * qty does not equal subtotal
+    else if (harga > 0 && subtotal > 0 && Math.abs(harga * qty - subtotal) > 10) {
+      if (harga > subtotal) {
+        subtotal = harga
+        harga = Math.round(subtotal / qty)
+      } else {
+        harga = Math.round(subtotal / qty)
+      }
+    }
+  } else {
+    // qty === 1
+    if (subtotal === 0 && harga > 0) subtotal = harga
+    if (harga === 0 && subtotal > 0) harga = subtotal
+  }
+
+  return {
+    namaBarang: name,
+    qty,
+    harga,
+    subtotal,
+    name,
+    price: harga,
+    total: subtotal,
+    urutan: Number(it?.urutan ?? idx ?? 0),
+  }
+}
+
+/**
+ * Full Receipt-Level Multi-Item Reconciliation.
+ * Cross-checks item subtotals against the receipt Grand Total to fix any item
+ * whose price was misassigned to the overall receipt Grand Total (e.g. 180.000).
+ */
+export function reconcileReceiptItems(rawItems: any[], grandTotal?: number): NormalizedItem[] {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return []
+
+  // Step 1: Normalize individual items first
+  let items: NormalizedItem[] = rawItems.map((it, idx) => normalizeReceiptItem(it, idx))
+
+  // Step 2: Clean bogus items (e.g. header rows or "TOTAL")
+  items = items.filter((it) => {
+    const n = it.namaBarang.toUpperCase()
+    return n.length >= 2 && !/^(TOTAL|GRAND TOTAL|JUMLAH RP|SUBTOTAL|TANDA TERIMA|HORMAT KAMI)$/.test(n)
+  })
+
+  if (items.length === 0) return []
+
+  // Step 3: Reconciliation vs Receipt Grand Total
+  const totalAmount = Math.max(0, Math.round(Number(grandTotal ?? 0)))
+  if (totalAmount > 0 && items.length > 1) {
+    const sumSubtotals = items.reduce((sum, it) => sum + it.subtotal, 0)
+
+    // If sum of item subtotals exceeds Grand Total by more than 1%:
+    if (sumSubtotals > totalAmount * 1.01) {
+      // Separate items into valid (< grandTotal) and invalid (>= grandTotal)
+      const validItems = items.filter((it) => it.subtotal < totalAmount)
+      const invalidItems = items.filter((it) => it.subtotal >= totalAmount)
+
+      if (invalidItems.length > 0 && validItems.length > 0) {
+        const sumValid = validItems.reduce((sum, it) => sum + it.subtotal, 0)
+        let remainingBudget = Math.max(0, totalAmount - sumValid)
+
+        invalidItems.forEach((it) => {
+          if (remainingBudget > 0) {
+            it.subtotal = remainingBudget
+            it.total = remainingBudget
+            it.harga = Math.max(1, Math.round(remainingBudget / it.qty))
+            it.price = it.harga
+            remainingBudget = 0
+          } else {
+            it.subtotal = Math.max(1, Math.round(totalAmount / items.length))
+            it.total = it.subtotal
+            it.harga = Math.max(1, Math.round(it.subtotal / it.qty))
+            it.price = it.harga
+          }
+        })
+      }
+    }
+  }
+
+  return items
 }

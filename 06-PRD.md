@@ -276,16 +276,20 @@ Integrasi Microsoft Graph API yang terhubung secara otomatis dengan akun `ifkada
 |receipt\_template|Text|
 |tanggal|Date|
 |nama\_toko|Text|
-|**kategori** \[BARU]|Text|
+|**kategori** [BARU]|Text|
 |nominal|Decimal|
-|**diskon** \[BARU]|Decimal|
-|**pajak** \[BARU]|Decimal|
-|**metode\_pembayaran** \[BARU]|Text|
+|**subtotal_nominal** [BARU]|Decimal|
+|**diskon** [BARU]|Decimal|
+|**pajak** [BARU]|Decimal|
+|**biaya_tambahan** [BARU]|Decimal|
+|**nama_biaya_tambahan** [BARU]|Text|
+|**no_telepon** [BARU]|Text|
+|**metode\_pembayaran** [BARU]|Text|
 |keterangan|Text|
 |status\_ocr|Text|
-|**ocr\_confidence** \[BARU]|Decimal|
-|**ocr\_raw\_text** \[BARU]|Text|
-|**is\_deleted, deleted\_at** \[BARU]|Boolean, Timestamp|
+|**ocr\_confidence** [BARU]|Decimal|
+|**ocr\_raw\_text** [BARU]|Text|
+|**is\_deleted, deleted\_at** [BARU]|Boolean, Timestamp|
 |created\_at|Timestamp|
 |updated\_at|Timestamp|
 

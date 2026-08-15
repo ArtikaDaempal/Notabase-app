@@ -28,7 +28,7 @@ export const BOTTOM_NAV_ITEMS: {
   icon: typeof LayoutDashboard
 }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'scan', label: 'Scan', icon: Scan },
+  { id: 'scan', label: 'Scan Nota', icon: Scan },
   { id: 'history', label: 'Arsip', icon: History },
   { id: 'report', label: 'Export', icon: FileSpreadsheet },
   { id: 'settings', label: 'Pengaturan', icon: Settings },

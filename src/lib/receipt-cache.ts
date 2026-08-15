@@ -5,7 +5,7 @@
  * even when Supabase is offline or operating under RLS isolation.
  */
 
-import { isValidInvoiceNumber } from '@/lib/utils'
+import { isValidInvoiceNumber, reconcileReceiptItems } from '@/lib/utils'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const globalForCache = globalThis as typeof globalThis & { _notabaseReceiptCache?: Map<string, any>; _cacheLoadedFromDisk?: boolean }
@@ -75,7 +75,7 @@ loadFromDisk()
 // Helper to format receipt object with all necessary fields & aliases
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function formatReceiptObject(r: any): any {
-  const merchantName = r.merchantName || r.namaToko || r.nama_toko || 'Nota Belanja'
+  const merchantName = r.merchantName || r.namaToko || r.nama_toko || '-'
   const rawInv = r.invoiceNumber || r.receiptNumber || r.receipt_number
   const invoiceNumber = isValidInvoiceNumber(rawInv) ? rawInv.trim() : ''
   const transactionDate = r.transactionDate || r.tanggal || new Date().toISOString().split('T')[0]
@@ -85,7 +85,8 @@ export function formatReceiptObject(r: any): any {
   const ocrText = r.ocrText || r.ocrRawText || r.ocr_raw_text || null
   const confidence = Number(r.confidence ?? r.ocrConfidence ?? r.ocr_confidence ?? 85)
   const imageUrl = r.imageUrl || r.image_url || null
-  const items = r.items || []
+  const rawItems = r.items || []
+  const items = Array.isArray(rawItems) ? reconcileReceiptItems(rawItems, total) : []
 
   return {
     ...r,

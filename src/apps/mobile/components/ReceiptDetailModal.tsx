@@ -27,12 +27,14 @@ import {
   Save,
   Loader2,
   ShoppingBag,
+  Phone,
+  Calculator,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { OCRBadge } from '@/shared/ui/OCRBadge'
 import { ReceiptForm } from '@/shared/ui/ReceiptForm'
-import { formatRupiah, formatDateID, cn, isValidInvoiceNumber } from '@/lib/utils'
+import { formatRupiah, formatDateID, cn, isValidInvoiceNumber, normalizeReceiptItem, reconcileReceiptItems } from '@/lib/utils'
 import { downloadReceiptImage } from '@/lib/download-image'
 import { toast } from 'sonner'
 import type { Receipt } from '@/shared/types/receipt'
@@ -62,8 +64,7 @@ export function ReceiptDetailModal({
   const merchantName = receipt.namaToko || receipt.merchantName || 'Nota'
   const dateStr = receipt.tanggal || receipt.transactionDate
   const totalAmount = receipt.nominal ?? receipt.total ?? 0
-  const rawInv = receipt.receiptNumber || receipt.invoiceNumber
-  const receiptNumber = isValidInvoiceNumber(rawInv) ? rawInv : ''
+  const receiptNumber = isValidInvoiceNumber(receipt.receiptNumber) ? receipt.receiptNumber : (isValidInvoiceNumber(receipt.invoiceNumber) ? receipt.invoiceNumber : '')
 
   const handleSaveForm = async (patch: Partial<Receipt>) => {
     if (!onUpdate) return
@@ -237,13 +238,30 @@ export function ReceiptDetailModal({
                     </div>
 
                     <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <CreditCard className="h-3.5 w-3.5 text-blue-500" />
-                      <span>{receipt.metodePembayaran || 'Tunai'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                       <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
                       <span>Tipe: {receipt.receiptType || 'scan'}</span>
                     </div>
+
+                    {receipt.noTelepon && (
+                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 col-span-2">
+                        <Phone className="h-3.5 w-3.5 text-blue-500" />
+                        <span>Telp: {receipt.noTelepon}</span>
+                      </div>
+                    )}
+
+                    {Boolean(receipt.subtotalNominal && receipt.subtotalNominal > 0) && (
+                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                        <Calculator className="h-3.5 w-3.5 text-blue-500" />
+                        <span>Subtotal: {formatRupiah(receipt.subtotalNominal ?? 0)}</span>
+                      </div>
+                    )}
+
+                    {Boolean(receipt.biayaTambahan && receipt.biayaTambahan > 0) && (
+                      <div className="flex items-center gap-2 text-amber-600 font-medium">
+                        <Tag className="h-3.5 w-3.5 text-amber-500" />
+                        <span>{receipt.namaBiayaTambahan || 'Biaya Admin'}: {formatRupiah(receipt.biayaTambahan ?? 0)}</span>
+                      </div>
+                    )}
                   </div>
 
                   {receipt.keterangan && (
@@ -263,21 +281,23 @@ export function ReceiptDetailModal({
                       Rincian Barang ({receipt.items.length})
                     </h4>
                     <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                      {receipt.items.map((it, idx) => (
-                        <div key={idx} className="py-2 flex items-center justify-between">
-                          <div>
-                            <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                              {it.namaBarang || it.name}
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              {it.qty} × {formatRupiah(it.harga || it.price || 0)}
+                      {reconcileReceiptItems(receipt.items, totalAmount).map((norm, idx) => {
+                        return (
+                          <div key={idx} className="py-2 flex items-center justify-between">
+                            <div>
+                              <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                                {norm.namaBarang}
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                {norm.qty} × {formatRupiah(norm.harga)}
+                              </span>
+                            </div>
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {formatRupiah(norm.subtotal)}
                             </span>
                           </div>
-                          <span className="font-bold text-slate-900 dark:text-white">
-                            {formatRupiah(it.subtotal || (it.qty || 1) * (it.harga || 0))}
-                          </span>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </Card>
                 )}

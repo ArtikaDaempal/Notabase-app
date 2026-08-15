@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/sync/auth
  * Initiates Microsoft OAuth 2.0 authentication flow for ANY Microsoft / OneDrive account

@@ -3,7 +3,8 @@
 /**
  * image-lightbox.tsx
  * Full-screen lightbox for viewing receipt images with
- * navigation, zoom, rotate, and download controls.
+ * navigation, zoom (+/-), mouse wheel zoom, double-click zoom,
+ * rotate, drag/pan, and download controls.
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react'
@@ -19,6 +20,8 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Maximize2,
+  RefreshCw,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { formatRupiah, formatDateID } from '@/lib/utils'
@@ -65,7 +68,7 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
       try {
         const rotated = await rotateImage(currentImageUrl, 90)
         setCurrentImageUrl(rotated)
-        setRotation(0) // Already applied via canvas
+        setRotation(0)
       } catch {
         // Fallback to CSS rotation if canvas fails
       }
@@ -98,6 +101,21 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
     }
   }, [currentImageUrl, receipt])
 
+  // Mouse Wheel Zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    if (e.deltaY < 0) {
+      setZoom((z) => Math.min(+(z + 0.25).toFixed(2), 4))
+    } else {
+      setZoom((z) => Math.max(+(z - 0.25).toFixed(2), 0.5))
+    }
+  }, [])
+
+  // Double click to toggle 1x / 2.2x zoom
+  const handleDoubleClick = useCallback(() => {
+    setZoom((z) => (z > 1.2 ? 1 : 2.2))
+  }, [])
+
   // Keyboard navigation
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -105,6 +123,9 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
       if (e.key === 'ArrowRight') goNext()
       if (e.key === 'ArrowLeft') goPrev()
       if (e.key === 'r' || e.key === 'R') rotateRight()
+      if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(+(z + 0.25).toFixed(2), 4))
+      if (e.key === '-') setZoom((z) => Math.max(+(z - 0.25).toFixed(2), 0.5))
+      if (e.key === '0') setZoom(1)
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -125,11 +146,11 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-md select-none"
         onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       >
         {/* ── Top toolbar ── */}
-        <div className="flex shrink-0 items-center justify-between px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between px-4 py-3 bg-black/40 backdrop-blur-lg border-b border-white/10 z-20">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold text-white">{receipt.merchantName}</p>
             <p className="text-[11px] text-white/60">
@@ -137,7 +158,17 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 pl-3">
+          <div className="flex items-center gap-2 pl-3">
+            {/* Zoom percentage badge */}
+            <button
+              onClick={() => setZoom(1)}
+              title="Reset Zoom (100%)"
+              className="flex items-center gap-1 rounded-full bg-blue-600/80 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-blue-600 transition-all shadow-xs"
+            >
+              {Math.round(zoom * 100)}%
+              {zoom !== 1 && <RefreshCw className="h-3 w-3 ml-0.5" />}
+            </button>
+
             {/* Counter */}
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/70">
               {currentIndex + 1} / {receipts.length}
@@ -154,40 +185,50 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
           </div>
         </div>
 
-        {/* ── Image area ── */}
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden">
+        {/* ── Image area (Supports wheel zoom, double-click, drag) ── */}
+        <div
+          className="relative flex flex-1 items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing"
+          onWheel={handleWheel}
+        >
           {/* Prev */}
           <button
             onClick={goPrev}
             disabled={currentIndex === 0}
-            className="absolute left-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-20 transition-all"
+            className="absolute left-3 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 disabled:opacity-20 transition-all shadow-lg backdrop-blur-xs"
             aria-label="Sebelumnya"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className="h-6 w-6" />
           </button>
 
-          {/* Image */}
+          {/* Image Canvas Container */}
           <AnimatePresence mode="wait">
             <motion.div
               key={currentIndex}
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.18 }}
-              className="flex max-h-full max-w-full items-center justify-center px-16"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="flex max-h-full max-w-full items-center justify-center p-4 sm:p-8"
+              onDoubleClick={handleDoubleClick}
             >
               {currentImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  ref={imgRef}
-                  src={currentImageUrl}
-                  alt={receipt.merchantName}
-                  className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
-                  style={{
-                    transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                    transition: 'transform 0.2s',
-                  }}
-                />
+                <motion.div
+                  drag={zoom > 1}
+                  dragConstraints={{ left: -400 * zoom, right: 400 * zoom, top: -400 * zoom, bottom: 400 * zoom }}
+                  dragElastic={0.05}
+                  className="relative flex items-center justify-center"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    ref={imgRef}
+                    src={currentImageUrl}
+                    alt={receipt.merchantName}
+                    className="max-h-[82vh] max-w-[90vw] rounded-xl object-contain shadow-2xl transition-transform duration-150 ease-out pointer-events-none"
+                    style={{
+                      transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                    }}
+                  />
+                </motion.div>
               ) : (
                 <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/5 p-12 text-center">
                   <FileText className="h-16 w-16 text-white/20" />
@@ -201,37 +242,45 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
           <button
             onClick={goNext}
             disabled={currentIndex === receipts.length - 1}
-            className="absolute right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-20 transition-all"
+            className="absolute right-3 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 disabled:opacity-20 transition-all shadow-lg backdrop-blur-xs"
             aria-label="Berikutnya"
           >
-            <ChevronRight className="h-5 w-5" />
+            <ChevronRight className="h-6 w-6" />
           </button>
         </div>
 
         {/* ── Bottom toolbar ── */}
-        <div className="shrink-0 border-t border-white/10 bg-black/60 px-4 py-3">
-          <div className="mx-auto flex max-w-md items-center justify-between gap-2">
+        <div className="shrink-0 border-t border-white/10 bg-black/80 backdrop-blur-md px-4 py-3 z-20">
+          <div className="mx-auto flex max-w-lg items-center justify-between gap-2">
             {/* Image controls */}
-            <div className="flex items-center gap-1">
-              <ToolBtn onClick={rotateLeft}  label="Putar Kiri">
+            <div className="flex items-center gap-1.5 bg-white/10 p-1 rounded-2xl">
+              <ToolBtn onClick={rotateLeft} label="Putar Kiri (R)">
                 <RotateCcw className="h-4 w-4" />
               </ToolBtn>
-              <ToolBtn onClick={rotateRight} label="Putar Kanan">
+              <ToolBtn onClick={rotateRight} label="Putar Kanan (R)">
                 <RotateCw className="h-4 w-4" />
               </ToolBtn>
+              <div className="h-4 w-px bg-white/20 mx-0.5" />
               <ToolBtn
-                onClick={() => setZoom((z) => Math.min(z + 0.25, 3))}
-                label="Perbesar"
-                disabled={zoom >= 3}
-              >
-                <ZoomIn className="h-4 w-4" />
-              </ToolBtn>
-              <ToolBtn
-                onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))}
-                label="Perkecil"
+                onClick={() => setZoom((z) => Math.max(+(z - 0.25).toFixed(2), 0.5))}
+                label="Perkecil (-)"
                 disabled={zoom <= 0.5}
               >
                 <ZoomOut className="h-4 w-4" />
+              </ToolBtn>
+              <button
+                onClick={() => setZoom(1)}
+                className="px-2 text-xs font-bold text-white/80 hover:text-white transition-colors"
+                title="Reset ke 100%"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <ToolBtn
+                onClick={() => setZoom((z) => Math.min(+(z + 0.25).toFixed(2), 4))}
+                label="Perbesar (+)"
+                disabled={zoom >= 4}
+              >
+                <ZoomIn className="h-4 w-4" />
               </ToolBtn>
             </div>
 
@@ -248,12 +297,12 @@ export function ImageLightbox({ receipts, initialIndex, onClose }: ImageLightbox
                 onClick={handleDownload}
                 disabled={!currentImageUrl || isDownloading}
                 className={cn(
-                  'flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-colors',
-                  'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40'
+                  'flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition-all shadow-md',
+                  'bg-blue-600 text-white hover:bg-blue-500 active:scale-95 disabled:opacity-40'
                 )}
               >
                 <Download className="h-3.5 w-3.5" />
-                {isDownloading ? 'Mengunduh...' : 'Download'}
+                {isDownloading ? 'Mengunduh...' : 'Unduh'}
               </button>
             </div>
           </div>
@@ -280,7 +329,7 @@ function ToolBtn({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className="flex h-9 w-9 items-center justify-center rounded-xl text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-30 transition-colors"
+      className="flex h-8 w-8 items-center justify-center rounded-xl text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 transition-all"
     >
       {children}
     </button>
